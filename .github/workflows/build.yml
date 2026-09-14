@@ -28,6 +28,17 @@ jobs:
       - name: Generate valid Tauri icons
         shell: bash
         run: pnpm tauri icon src-tauri/icons/source.svg
+      - name: Debug - Find problematic JS files
+        shell: bash
+        run: |
+          echo "🔍 جاري فحص ملفات الإعدادات بحثاً عن الخطأ النحوي..."
+          for file in *.js; do
+            if [ -f "$file" ]; then
+              echo "📄 فحص الملف: $file"
+              head -n 2 "$file"
+              echo "------------------------"
+            fi
+          done
       - name: Build Web App
         run: pnpm build
       - name: Build Windows NSIS

@@ -1,0 +1,18 @@
+[package]
+name = "photomedia-erp"
+version = "2.0.0"
+description = "PhotoMedia ERP production command desk"
+authors = ["PhotoMedia"]
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "photomedia_erp_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"

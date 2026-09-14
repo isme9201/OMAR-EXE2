@@ -1,0 +1,1 @@
+{"name":"portfolio_storage","project_id":"tgufcpgrbsaxccbkmvhx","query":"insert into storage.buckets (id, name, public) values ('portfolio-media', 'portfolio-media', false) on conflict (id) do nothing;"}

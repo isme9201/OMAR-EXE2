@@ -1,0 +1,19 @@
+create table if not exists public.portfolio_members (
+  id uuid primary key default gen_random_uuid(),
+  email text not null unique,
+  display_name text not null default '',
+  role text not null default 'viewer' check (role in ('admin', 'editor', 'viewer')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.portfolio_members enable row level security;
+
+drop policy if exists portfolio_members_self_read on public.portfolio_members;
+create policy portfolio_members_self_read
+on public.portfolio_members for select to authenticated
+using (lower(email) = lower(coalesce(auth.jwt() ->> 'email', '')));
+
+-- Apply equivalent role checks to write policies on portfolio_pages and portfolio_elements
+-- when those policies are managed in the target project. Keep service-role migration
+-- execution separate from the browser anon key used by the editor.

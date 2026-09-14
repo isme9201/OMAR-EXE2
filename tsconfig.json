@@ -1,5 +1,5 @@
-{
-  "compilerOptions": {
+"compilerOptions": {
+    "baseUrl": ".",
     "target": "ES2017",
     "lib": [
       "dom",
@@ -28,21 +28,3 @@
       ]
     }
   },
-  "include": [
-    "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
-    ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts"
-  ],
-  "exclude": [
-    "node_modules",
-    "client",
-    "server",
-    "vite.config.ts",
-    "dist",
-    "out",
-    ".agents",
-    "supabase/functions"
-  ]
-}

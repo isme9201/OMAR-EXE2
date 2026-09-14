@@ -1,5 +1,4 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {
+export default {
   output: "export",
   images: { unoptimized: true },
   trailingSlash: true,
@@ -12,5 +11,3 @@ const nextConfig = {
     NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY,
   },
 };
-
-module.exports = nextConfig;

@@ -28,6 +28,8 @@ jobs:
       - name: Generate valid Tauri icons
         shell: bash
         run: pnpm tauri icon src-tauri/icons/source.svg
+      - name: Build Web App
+        run: pnpm build
       - name: Build Windows NSIS
         run: pnpm tauri build --bundles nsis
       - uses: actions/upload-artifact@v4
@@ -56,6 +58,8 @@ jobs:
       - name: Generate valid Tauri icons
         shell: bash
         run: pnpm tauri icon src-tauri/icons/source.svg
+      - name: Build Web App
+        run: pnpm build
       - name: Build macOS DMG
         run: pnpm tauri build --bundles dmg
       - uses: actions/upload-artifact@v4
@@ -88,6 +92,8 @@ jobs:
       - name: Generate valid Tauri icons
         shell: bash
         run: pnpm tauri icon src-tauri/icons/source.svg
+      - name: Build Web App
+        run: pnpm build
       - name: Build Linux packages
         run: pnpm tauri build --bundles deb,appimage
       - uses: actions/upload-artifact@v4

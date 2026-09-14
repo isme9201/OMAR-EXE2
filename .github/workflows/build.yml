@@ -54,6 +54,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Generate valid Tauri icons
+        shell: bash
         run: pnpm tauri icon src-tauri/icons/source.svg
       - name: Build macOS DMG
         run: pnpm tauri build --bundles dmg
@@ -85,6 +86,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Generate valid Tauri icons
+        shell: bash
         run: pnpm tauri icon src-tauri/icons/source.svg
       - name: Build Linux packages
         run: pnpm tauri build --bundles deb,appimage

@@ -13,13 +13,17 @@ export function getSupabaseBrowserClient() {
   browserClient = createClient(url, key);
   return browserClient;
 }
-export async function loadWorkspaceRecords(): Promise<WorkspaceRecord[]> {
-  const { data } = await getSupabaseBrowserClient().from('workspace_records').select('*').order('updated_at', { ascending: false });
-  return (data ?? []) as WorkspaceRecord[];
+export async function loadWorkspaceRecords(): Promise<{ data: WorkspaceRecord[]; error: string }> {
+  try {
+    const { data, error } = await getSupabaseBrowserClient().from('workspace_records').select('*').order('updated_at', { ascending: false });
+    return { data: (data ?? []) as WorkspaceRecord[], error: error?.message ?? '' };
+  } catch (error) {
+    return { data: [], error: error instanceof Error ? error.message : 'supabase-unavailable' };
+  }
 }
 export async function createWorkspaceRecord(record: WorkspaceRecord) { return getSupabaseBrowserClient().from('workspace_records').insert(record).select('*').single(); }
 export async function updateWorkspaceRecord(id: string, record: WorkspaceRecord) { return getSupabaseBrowserClient().from('workspace_records').update(record).eq('id', id).select('*').single(); }
-export async function recordStudioAction(action: Record<string, unknown>) { return getSupabaseBrowserClient().from('studio_actions').insert(action); }
+export async function recordStudioAction(action: string, label: string, payload: Record<string, unknown> = {}) { return getSupabaseBrowserClient().from('studio_actions').insert({ action, label, payload }); }
 export async function getStudioThemePreference() { const { data } = await getSupabaseBrowserClient().from('studio_preferences').select('theme').limit(1).maybeSingle(); return data?.theme ?? 'light'; }
 export async function saveStudioThemePreference(theme: string) { return getSupabaseBrowserClient().from('studio_preferences').upsert({ theme }); }
 export async function getPrivatePortfolioMediaUrl(path: string) {

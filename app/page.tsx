@@ -1,6 +1,5 @@
-/* Editorial Atelier design reminder: the overview is an asymmetric, decisive production desk—not a generic card grid. */
-import { DashboardApp } from "@/components/DashboardApp";
+import { AvenmediaChat } from "@/components/AvenmediaChat";
 
 export default function HomePage() {
-  return <DashboardApp page="overview" />;
+  return <AvenmediaChat />;
 }

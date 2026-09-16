@@ -3,8 +3,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "PhotoMedia ERP | مكتب الإنتاج",
-  description: "Arabic-first production command desk for photography and media studios.",
+  title: "Avenmedia | مساحة تسليم الملفات",
+  description: "Secure Arabic-first chat and original-quality file delivery for Avenmedia teams.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

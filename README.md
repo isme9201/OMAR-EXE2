@@ -1,4 +1,4 @@
-# PhotoMedia ERP — Next.js + Tauri
+# Avenmedia — Next.js + Tauri
 
 An **Arabic-first, RTL production command desk** for photography and media studios. The interface has been rebuilt as a multi-page Next.js and Tailwind workspace and packaged in a Tauri 2 desktop wrapper.
 

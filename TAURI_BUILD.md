@@ -1,4 +1,4 @@
-# PhotoMedia ERP — Tauri production builds
+# Avenmedia — Tauri production builds
 
 ## Standalone Windows configuration
 
@@ -60,4 +60,4 @@ Reference: [Tauri Windows Installer documentation](https://v2.tauri.app/distribu
 
 ## Direct executable limitation
 
-The direct `photomedia-erp.exe` is the application binary only; it is not a fixed-runtime WebView2 distribution and does not replace the Windows WebView2 provider. The verified no-network installation path is the NSIS package produced with `offlineInstaller`, which embeds the WebView2 runtime installer and provisions the provider during setup. A truly fixed-runtime direct distribution requires a tested `fixedRuntime` directory and matching host validation; that path has not been claimed or fabricated in this Linux environment.
+The direct `avenmedia-erp.exe` is the application binary only; it is not a fixed-runtime WebView2 distribution and does not replace the Windows WebView2 provider. The verified no-network installation path is the NSIS package produced with `offlineInstaller`, which embeds the WebView2 runtime installer and provisions the provider during setup. A truly fixed-runtime direct distribution requires a tested `fixedRuntime` directory and matching host validation; that path has not been claimed or fabricated in this Linux environment.

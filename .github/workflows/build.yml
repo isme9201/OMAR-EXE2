@@ -1,4 +1,4 @@
-name: Build PhotoMedia ERP
+name: Build Avenmedia
 
 on:
   push:
@@ -45,7 +45,7 @@ jobs:
         run: pnpm tauri build --bundles nsis
       - uses: actions/upload-artifact@v4
         with:
-          name: PhotoMedia-ERP-Windows-x64
+          name: Avenmedia-Windows-x64
           path: src-tauri/target/**/release/bundle/nsis/**
           if-no-files-found: error
           compression-level: 0
@@ -75,7 +75,7 @@ jobs:
         run: pnpm tauri build --bundles dmg
       - uses: actions/upload-artifact@v4
         with:
-          name: PhotoMedia-ERP-macOS
+          name: Avenmedia-macOS
           path: src-tauri/target/**/release/bundle/dmg/**
           if-no-files-found: error
           compression-level: 0
@@ -109,7 +109,7 @@ jobs:
         run: pnpm tauri build --bundles deb,appimage
       - uses: actions/upload-artifact@v4
         with:
-          name: PhotoMedia-ERP-Linux-amd64
+          name: Avenmedia-Linux-amd64
           path: |
             src-tauri/target/**/release/bundle/deb/**
             src-tauri/target/**/release/bundle/appimage/**
@@ -135,7 +135,7 @@ jobs:
         run: pnpm build
       - uses: actions/upload-artifact@v4
         with:
-          name: PhotoMedia-ERP-Web
+          name: Avenmedia-Web
           path: out/**
           if-no-files-found: error
           compression-level: 6
@@ -153,9 +153,9 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: v2.0.0-build-${{ github.run_number }}
-          name: PhotoMedia ERP v2.0.0 build ${{ github.run_number }}
+          name: Avenmedia v2.0.0 build ${{ github.run_number }}
           body: |
-            Automated PhotoMedia ERP release with Windows NSIS, macOS DMG, Linux DEB/AppImage, and web static export.
+            Automated Avenmedia release with Windows NSIS, macOS DMG, Linux DEB/AppImage, and web static export.
           draft: false
           prerelease: false
           files: release-assets/**/*

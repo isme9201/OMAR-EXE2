@@ -147,18 +147,35 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
         with:
-          path: release-assets
+          name: Avenmedia-Windows-x64
+          path: release-assets/windows
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Avenmedia-macOS
+          path: release-assets/macos
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Avenmedia-Linux-amd64
+          path: release-assets/linux
+      - name: Download web artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Avenmedia-Web
+          path: release-assets/web
       - name: Package release assets with unique names
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p release-packages
-          (cd release-assets/Avenmedia-Windows-x64 && zip -qr ../../release-packages/Avenmedia-Windows-x64.zip .)
-          (cd release-assets/Avenmedia-macOS && zip -qr ../../release-packages/Avenmedia-macOS.zip .)
-          (cd release-assets/Avenmedia-Linux-amd64 && zip -qr ../../release-packages/Avenmedia-Linux-amd64.zip .)
-          (cd release-assets/Avenmedia-Web && zip -qr ../../release-packages/Avenmedia-Web.zip .)
+          (cd release-assets/windows && zip -qr ../../release-packages/Avenmedia-Windows-x64.zip .)
+          (cd release-assets/macos && zip -qr ../../release-packages/Avenmedia-macOS.zip .)
+          (cd release-assets/linux && zip -qr ../../release-packages/Avenmedia-Linux-amd64.zip .)
+          (cd release-assets/web && zip -qr ../../release-packages/Avenmedia-Web.zip .)
           ls -lh release-packages
       - uses: softprops/action-gh-release@v2
         with:

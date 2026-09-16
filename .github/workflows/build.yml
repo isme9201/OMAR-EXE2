@@ -150,12 +150,22 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: release-assets
+      - name: Package release assets with unique names
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-packages
+          (cd release-assets/Avenmedia-Windows-x64 && zip -qr ../../release-packages/Avenmedia-Windows-x64.zip .)
+          (cd release-assets/Avenmedia-macOS && zip -qr ../../release-packages/Avenmedia-macOS.zip .)
+          (cd release-assets/Avenmedia-Linux-amd64 && zip -qr ../../release-packages/Avenmedia-Linux-amd64.zip .)
+          (cd release-assets/Avenmedia-Web && zip -qr ../../release-packages/Avenmedia-Web.zip .)
+          ls -lh release-packages
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: v2.0.0-build-${{ github.run_number }}
           name: Avenmedia v2.0.0 build ${{ github.run_number }}
           body: |
-            Automated Avenmedia release with Windows NSIS, macOS DMG, Linux DEB/AppImage, and web static export.
+            Automated Avenmedia release with uniquely packaged Windows NSIS, macOS DMG, Linux DEB/AppImage, and web static export.
           draft: false
           prerelease: false
-          files: release-assets/**/*
+          files: release-packages/*.zip

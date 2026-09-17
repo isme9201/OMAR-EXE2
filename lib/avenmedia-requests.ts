@@ -6,6 +6,7 @@ export type RequestRow = {
   description: string | null; requirements: string | null; estimated_cost: number | null;
   image_urls: string[]; status: string; due_at: string | null; task_type: string;
   priority: string; created_at: string; updated_at?: string;
+  payment_type?: 'none' | 'deposit' | 'full'; paid_amount?: number | null; payment_method?: string | null; payment_note?: string | null;
   assignments?: { employee_id: string; profile?: { id: string; name: string; specialty: string | null } | null }[];
 };
 
@@ -23,7 +24,7 @@ export async function listRequests(query = '') {
 
 export async function saveRequest(input: Record<string, unknown>, id?: string) {
   const client = db(); const employeeIds = Array.isArray(input.employeeIds) ? input.employeeIds as string[] : [];
-  const payload = { title: input.title, task_type: input.task_type || 'photography', client_name: input.client_name, client_phone: input.client_phone || null, description: input.description || null, requirements: input.requirements || null, estimated_cost: input.estimated_cost ? Number(input.estimated_cost) : null, image_urls: Array.isArray(input.image_urls) ? input.image_urls : [], status: input.status || 'new', priority: input.priority || 'normal', due_at: input.due_at || null, updated_at: new Date().toISOString() };
+  const payload = { title: input.title || null, task_type: input.task_type || 'photography', client_name: input.client_name, client_phone: input.client_phone || null, description: input.description || null, requirements: input.requirements || null, estimated_cost: input.estimated_cost ? Number(input.estimated_cost) : null, image_urls: Array.isArray(input.image_urls) ? input.image_urls : [], status: input.status || 'new', priority: input.priority || 'normal', due_at: input.due_at || null, payment_type: input.payment_type || 'none', paid_amount: input.paid_amount ? Number(input.paid_amount) : 0, payment_method: input.payment_method || null, payment_note: input.payment_note || null, updated_at: new Date().toISOString() };
   const result = id ? await client.from('tasks').update(payload).eq('id', id).select('*').single() : await client.from('tasks').insert({ ...payload, created_by: (await client.auth.getUser()).data.user?.id }).select('*').single();
   if (result.error || !result.data) { console.error('[Avenmedia][requests.save]', result.error); return { data: null, error: errorText(result.error) || 'تعذر حفظ الطلب' }; }
   await client.from('task_assignments').delete().eq('task_id', result.data.id);

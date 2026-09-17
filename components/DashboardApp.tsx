@@ -16,6 +16,7 @@ import { createWorkspaceRecord, getStudioThemePreference, loadWorkspaceRecords, 
 import { AvenmediaOperations } from "@/components/AvenmediaOperations";
 import { AvenmediaReports } from "@/components/AvenmediaReports";
 import { RequestManagement } from "@/components/RequestManagement";
+import { EmployeeTasks } from "@/components/EmployeeTasks";
 
 type Task = { id: number; recordId?: string; client: string; title: string; stage: string; due: string; owner: string; progress: number; tone: string };
 type ModalKind = "booking" | "magic" | "invoice" | "upload" | null;
@@ -176,7 +177,7 @@ export function DashboardApp({ page }: { page: WorkspacePage }) {
 
           {safePage === "overview" && <SimpleOverview />}
           {(safePage === "calendar" || safePage === "clients") && <RequestManagement />}
-          {safePage === "production" && <ProductionPage tasks={tasks} advanceTask={advanceTask} />}
+          {safePage === "production" && <EmployeeTasks />}
           {safePage === "finance" && <FinancePage setModal={setModal} />}
           {safePage === "reports" && <AvenmediaReports />}
           {safePage === "equipment" && <EquipmentPage setNotice={setNotice} />}

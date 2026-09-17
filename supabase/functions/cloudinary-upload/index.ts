@@ -38,7 +38,7 @@ Deno.serve(async (request) => {
     if (!recipientId || !text) return json({ error: "Recipient and message are required" }, 400);
     const { data: recipient } = await adminClient.from("profiles").select("id").eq("id", recipientId).eq("is_active", true).maybeSingle();
     if (!recipient) return json({ error: "Recipient is not active" }, 404);
-    const { data, error } = await adminClient.from("tasks").insert({ title: text.slice(0, 80), description: text, task_type: "chat", status: "new", priority: "normal", created_by: callerData.user.id, client_name: recipientId }).select("id,title,description,created_by,created_at,status,priority,task_type,client_name,client_phone,due_at").single();
+    const { data, error } = await adminClient.from("tasks").insert({ title: text.slice(0, 80), description: text, task_type: "chat", status: "new", priority: "normal", created_by: callerId, client_name: recipientId }).select("id,title,description,created_by,created_at,status,priority,task_type,client_name,client_phone,due_at").single();
     if (error || !data) return json({ error: error?.message ?? "Message creation failed" }, 400);
     const assignment = await adminClient.from("task_assignments").insert({ task_id: data.id, employee_id: recipientId });
     if (assignment.error && assignment.error.code !== "23505") return json({ error: assignment.error.message }, 400);
@@ -52,7 +52,7 @@ Deno.serve(async (request) => {
     if (!recipientId) return json({ error: "Recipient is required" }, 400);
     const { data: recipient } = await adminClient.from("profiles").select("id").eq("id", recipientId).eq("is_active", true).maybeSingle();
     if (!recipient) return json({ error: "Recipient is not active" }, 404);
-    const { data, error } = await adminClient.from("tasks").insert({ title, description, task_type: "chat", status: "new", priority: "normal", created_by: callerData.user.id, client_name: recipientId }).select("id,title,description,created_by,created_at,status,priority,task_type,client_name,client_phone,due_at").single();
+    const { data, error } = await adminClient.from("tasks").insert({ title, description, task_type: "chat", status: "new", priority: "normal", created_by: callerId, client_name: recipientId }).select("id,title,description,created_by,created_at,status,priority,task_type,client_name,client_phone,due_at").single();
     if (error || !data) return json({ error: error?.message ?? "Transfer creation failed" }, 400);
     const assignment = await adminClient.from("task_assignments").insert({ task_id: data.id, employee_id: recipientId });
     if (assignment.error && assignment.error.code !== "23505") return json({ error: assignment.error.message }, 400);

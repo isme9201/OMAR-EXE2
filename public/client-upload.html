@@ -18,8 +18,8 @@
 </main>
 <script>
   // ضع قيمتك العامة فقط هنا. لا تضع CLOUDINARY_API_SECRET أبداً.
-  const SUPABASE_URL = 'https://YOUR_PROJECT.supabase.co';
-  const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+  const SUPABASE_URL = 'https://tgufcpgrbsaxccbkmvhx.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRndWZjcGdyYnNheGNjYmttdmh4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODczODU4MDcsImV4cCI6MjEwMjk2MTgwN30.2WlPv_c3Y99n0rd5sFOn0B0xIVI2jxoRFA26gKunmMs';
   const token = new URLSearchParams(location.search).get('token') || '';
   const $ = id => document.getElementById(id); const files = $('files');
   $('tokenView').textContent = token ? token.slice(0,8) + '…' : 'غير موجود';

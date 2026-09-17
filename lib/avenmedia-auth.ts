@@ -1,4 +1,5 @@
 import { createClient, type Session, type User } from '@supabase/supabase-js';
+import { supabaseConfig } from '@/lib/supabase-config';
 
 export const SPECIALTIES = [
   { value: 'designer', label: 'مصمم' },
@@ -16,9 +17,7 @@ function logAuthError(operation: string, error: unknown) {
 let authClient: ReturnType<typeof createClient> | null = null;
 export function getAuthClient() {
   if (authClient) return authClient;
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) return null;
+  const { url, key } = supabaseConfig();
   authClient = createClient(url, key, {
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'pkce' },
   });

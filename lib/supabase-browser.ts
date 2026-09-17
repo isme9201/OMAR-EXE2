@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { supabaseConfig } from '@/lib/supabase-config';
 
 export type WorkspaceRecord = Record<string, unknown> & { id?: string; record_id?: string };
 export type PortfolioElement = { id?: string; element_type: string; content: Record<string, unknown>; [key: string]: unknown };
@@ -7,8 +8,7 @@ export type PortfolioPage = { id: string; slug: string; title: string; descripti
 let browserClient: SupabaseClient | null = null;
 export function getSupabaseBrowserClient() {
   if (browserClient) return browserClient;
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key-for-static-build';
+  const { url, key } = supabaseConfig();
   browserClient = createClient(url, key);
   return browserClient;
 }

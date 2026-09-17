@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { supabaseConfig } from '@/lib/supabase-config';
 
 export type Employee = { id: string; name: string; email: string; role: string; specialty?: string | null };
 export type UploadRecord = { id: string; file_name?: string | null; public_url?: string | null; created_at?: string | null; task_id?: string | null };
@@ -9,9 +10,8 @@ const empty = <T>(data: T, error = ''): Result<T> => ({ data, error });
 function logError(operation: string, error: string) { if (error && typeof console !== 'undefined') console.error(`[Avenmedia][${operation}] ${error}`); }
 
 function client(): SupabaseClient | null {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  return url && key ? createClient(url, key) : null;
+  const { url, key } = supabaseConfig();
+  return createClient(url, key);
 }
 
 export async function listAvenmediaTasks(): Promise<Result<AvenmediaTask[]>> {

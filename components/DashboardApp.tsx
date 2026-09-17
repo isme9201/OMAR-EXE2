@@ -15,14 +15,14 @@ import type { WorkspacePage } from "@/lib/workspaces";
 import { createWorkspaceRecord, getStudioThemePreference, loadWorkspaceRecords, recordStudioAction, saveStudioThemePreference, updateWorkspaceRecord, type WorkspaceRecord } from "@/lib/supabase-browser";
 import { AvenmediaOperations } from "@/components/AvenmediaOperations";
 import { AvenmediaReports } from "@/components/AvenmediaReports";
+import { RequestManagement } from "@/components/RequestManagement";
 
 type Task = { id: number; recordId?: string; client: string; title: string; stage: string; due: string; owner: string; progress: number; tone: string };
 type ModalKind = "booking" | "magic" | "invoice" | "upload" | null;
 
 const navItems: { page: WorkspacePage; label: string; icon: LucideIcon; tag?: string }[] = [
   { page: "overview", label: "نظرة الاستوديو", icon: Grid2X2 },
-  { page: "calendar", label: "الروزنامة", icon: CalendarDays },
-  { page: "clients", label: "العملاء والحجوزات", icon: UsersRound },
+  { page: "calendar", label: "إدارة الطلبات", icon: ClipboardList },
   { page: "production", label: "غرفة الإنتاج", icon: Video },
   { page: "finance", label: "المالية", icon: WalletCards },
   { page: "reports", label: "كشف الحساب", icon: ReceiptText },
@@ -37,8 +37,8 @@ const portfolioNavItem = { label: "محرر المحفظة", icon: Palette };
 
 const pageMeta: Record<WorkspacePage, { eyebrow: string; title: string; description: string }> = {
   overview: { eyebrow: "مكتب الإنتاج", title: "اليوم في الاستوديو", description: "لقطة واضحة للحجوزات، الملفات الجديدة، والقرارات التي تحتاجك الآن." },
-  calendar: { eyebrow: "العمليات", title: "روزنامة الإنتاج", description: "توزيع اليوم بين الاستوديوهات والفرق، من دون تداخلات غير مرئية." },
-  clients: { eyebrow: "العلاقات", title: "العملاء والحجوزات", description: "ملفات عميلة تجمع التاريخ، الميزانية، التسليم، والقرار التالي." },
+  calendar: { eyebrow: "العمليات", title: "إدارة الطلبات", description: "إضافة، بحث، تعديل، حذف، توزيع المنفذين، وطباعة جدول العمل." },
+  clients: { eyebrow: "العمليات", title: "إدارة الطلبات", description: "إدارة كاملة لطلبات الزبائن ومواعيد التسليم." },
   production: { eyebrow: "سير العمل", title: "غرفة الإنتاج", description: "كل مشروع في مرحلته الصحيحة، مع ملكية واضحة وموعد تسليم مرئي." },
   finance: { eyebrow: "الدفتر", title: "المالية والمطالبات", description: "صورة تشغيلية للمبالغ، الفواتير، والتحصيل قبل أن تصبح متأخرة." },
   reports: { eyebrow: "التقارير", title: "كشف الحساب الشهري", description: "المهام المنجزة وغير المنجزة، الحضور، الإيرادات، المصاريف، والصافي مع طباعة PDF." },
@@ -174,9 +174,8 @@ export function DashboardApp({ page }: { page: WorkspacePage }) {
 
           <div className={`mb-6 flex items-center gap-3 rounded-xl border px-4 py-3 text-xs ${dark ? "border-[#3c5d53] bg-[#0b4d3e]/30 text-[#dcf1e4]" : "border-[#c9ded2] bg-[#e3eee9] text-[#0b4d3e]"}`}><Zap className="h-4 w-4 fill-current" /><span>{notice}</span></div>
 
-          {safePage === "overview" && <Overview tasks={tasks} records={records} dataLoading={dataLoading} setModal={setModal} advanceTask={advanceTask} dark={dark} />}
-          {safePage === "calendar" && <CalendarPage setModal={setModal} />}
-          {safePage === "clients" && <ClientsPage query={clientQuery} setQuery={setClientQuery} setModal={setModal} />}
+          {safePage === "overview" && <SimpleOverview />}
+          {(safePage === "calendar" || safePage === "clients") && <RequestManagement />}
           {safePage === "production" && <ProductionPage tasks={tasks} advanceTask={advanceTask} />}
           {safePage === "finance" && <FinancePage setModal={setModal} />}
           {safePage === "reports" && <AvenmediaReports />}
@@ -233,6 +232,16 @@ function Metric({ label, value, suffix, detail, icon: Icon, accent }: { label: s
 }
 function Timeline({ time, title, meta, color }: { time: string; title: string; meta: string; color: string }) {
   return <div className="relative grid grid-cols-[62px_1fr] gap-3 py-3.5"><span className="font-mono text-xs text-[#67756e]">{time}</span><div><span className="absolute -right-[25px] top-5 h-2.5 w-2.5 rounded-full border-2 border-[#fffdf8]" style={{ background: color }} /><strong className="block text-sm">{title}</strong><span className="mt-1 block text-xs text-[#6d7b74]">{meta}</span></div></div>;
+}
+
+function SimpleOverview() {
+  const actions = [
+    ["/calendar", "إدارة الطلبات", "إضافة طلب، البحث، التعديل والحذف", ClipboardList],
+    ["/operations", "إدارة الفريق", "الموظفون والتخصصات والمهام", UsersRound],
+    ["/production", "إدارة المهام", "متابعة مراحل التنفيذ والمنجزات", Video],
+    ["/reports", "التقارير", "كشف الحساب وطباعة PDF", ReceiptText],
+  ] as const;
+  return <div dir="rtl" className="space-y-6"><section className="rounded-[28px] bg-[#111b4e] p-8 text-white shadow-xl"><span className="font-mono text-xs tracking-[.2em] text-[#b9c3ff]">AVENMEDIA / CONTROL DESK</span><h2 className="mt-3 text-4xl font-black">مكتب الإدارة</h2><p className="mt-3 max-w-2xl text-sm leading-7 text-indigo-100">واجهة مختصرة للوصول السريع إلى طلبات الزبائن، المهام، المنفذين، والتقارير.</p><div className="mt-6 flex flex-wrap gap-3"><Link href="/calendar" className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-black text-[#111b4e]"><Plus className="h-4" />إضافة طلب</Link><Link href="/upload" className="inline-flex items-center gap-2 rounded-xl border border-white/30 px-4 py-3 text-sm font-bold"><Link2 className="h-4" />رابط رفع للزبون</Link></div></section><section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{actions.map(([href, title, description, Icon]) => <Link key={href} href={href} className="group rounded-2xl border border-[#dce1ff] bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:border-[#7388ff]"><span className="grid h-11 w-11 place-items-center rounded-xl bg-[#eef1ff] text-[#5366e8]"><Icon className="h-5" /></span><h3 className="mt-4 text-lg font-black text-[#111b4e]">{title}</h3><p className="mt-2 text-xs leading-6 text-slate-500">{description}</p><span className="mt-4 block text-xs font-bold text-[#5366e8]">عرض الكل ←</span></Link>)}</section></div>;
 }
 function TaskCard({ task, advanceTask }: { task: Task; advanceTask: (id: number) => void }) {
   return <article className="rounded-2xl border border-[#e1d8cb] bg-[#fffdf8] p-4 transition hover:border-[#b8cfc2]"><div className="mb-3 flex items-start justify-between gap-2"><span className={`rounded-lg px-2 py-1 text-[10px] font-extrabold ${task.tone}`}>{task.stage}</span><button aria-label="خيارات المهمة" onClick={() => advanceTask(task.id)} className="text-[#64736b]"><MoreHorizontal className="h-4" /></button></div><h4 className="m-0 text-sm font-extrabold">{task.client}</h4><p className="mt-1 text-xs text-[#65756d]">{task.title}</p><div className="mt-4 flex items-center justify-between text-[11px]"><span className="font-mono text-[#a25624]">{task.due}</span><span className="font-bold text-[#506159]">{task.owner}</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#e6ddd1]"><div className="h-full rounded-full bg-[#0b4d3e]" style={{ width: `${task.progress}%` }} /></div><button onClick={() => advanceTask(task.id)} className="mt-4 w-full rounded-lg border border-[#cfe0d6] bg-[#edf6f0] py-2 text-xs font-extrabold text-[#0b4d3e] transition hover:bg-[#dcefe4] active:scale-[.98]">نقل للمرحلة التالية</button></article>;

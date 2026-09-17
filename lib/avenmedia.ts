@@ -16,7 +16,7 @@ function client(): SupabaseClient | null {
 
 export async function listAvenmediaTasks(): Promise<Result<AvenmediaTask[]>> {
   const db = client(); if (!db) return empty([], 'Supabase is not configured');
-  const { data, error } = await db.from('avenmedia_tasks').select('*').order('created_at', { ascending: false });
+  const { data, error } = await db.from('tasks').select('*').order('created_at', { ascending: false });
   const message = error?.message ?? ''; logError('tasks.list', message); return empty((data ?? []) as AvenmediaTask[], message);
 }
 export async function listEmployees(): Promise<Result<Employee[]>> {
@@ -32,7 +32,7 @@ export async function listUploadRecords(): Promise<Result<UploadRecord[]>> {
 export async function createAvenmediaTask(input: Record<string, unknown>): Promise<Result<AvenmediaTask | null>> {
   const db = client(); if (!db) return empty(null, 'Supabase is not configured');
   const { employeeIds, ...task } = input;
-  const { data, error } = await db.from('avenmedia_tasks').insert(task).select('*').single();
+  const { data, error } = await db.from('tasks').insert(task).select('*').single();
   if (error || !data) { const message = error?.message ?? 'Task creation failed'; logError('tasks.create', message); return empty(null, message); }
   if (Array.isArray(employeeIds) && employeeIds.length) await db.from('task_assignments').insert(employeeIds.map((employee_id) => ({ task_id: data.id, employee_id })));
   return empty(data as AvenmediaTask);
@@ -40,18 +40,20 @@ export async function createAvenmediaTask(input: Record<string, unknown>): Promi
 export async function updateAvenmediaTask(id: string, input: Record<string, unknown>): Promise<Result<AvenmediaTask | null>> {
   const db = client(); if (!db) return empty(null, 'Supabase is not configured');
   const { employeeIds, ...task } = input;
-  const { data, error } = await db.from('avenmedia_tasks').update(task).eq('id', id).select('*').single();
+  const { data, error } = await db.from('tasks').update(task).eq('id', id).select('*').single();
   if (error || !data) { const message = error?.message ?? 'Task update failed'; logError('tasks.update', message); return empty(null, message); }
   if (Array.isArray(employeeIds)) { await db.from('task_assignments').delete().eq('task_id', id); if (employeeIds.length) await db.from('task_assignments').insert(employeeIds.map((employee_id) => ({ task_id: id, employee_id }))); }
   return empty(data as AvenmediaTask);
 }
 export async function deleteAvenmediaTask(id: string): Promise<Result<null>> {
   const db = client(); if (!db) return empty(null, 'Supabase is not configured');
-  const { error } = await db.from('avenmedia_tasks').delete().eq('id', id);
+  const { error } = await db.from('tasks').delete().eq('id', id);
   const message = error?.message ?? ''; logError('tasks.delete', message); return empty(null, message);
 }
 export async function invokeAvenmediaFunction<T>(name: string, body: unknown): Promise<Result<T | null>> {
   const db = client(); if (!db) return empty(null, 'Supabase is not configured');
   const { data, error } = await db.functions.invoke(name, { body });
-  const message = error?.message ?? ''; logError(`function.${name}`, message); return empty((data ?? null) as T | null, message);
+  let message = error?.message ?? '';
+  if (error && 'context' in error && (error as any).context) { try { const detail = await (error as any).context.json(); if (detail?.error) message = detail.error; } catch {} }
+  logError(`function.${name}`, message); return empty((data ?? null) as T | null, message);
 }

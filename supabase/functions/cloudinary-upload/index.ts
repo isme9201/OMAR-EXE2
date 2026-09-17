@@ -15,16 +15,22 @@ Deno.serve(async (request) => {
   const apiKey = Deno.env.get("CLOUDINARY_API_KEY");
   const apiSecret = Deno.env.get("CLOUDINARY_API_SECRET");
   if (!supabaseUrl || !anonKey || !serviceRoleKey || !cloudName || !apiKey || !apiSecret) return json({ error: "Function secrets are incomplete" }, 500);
-  const authHeader = request.headers.get("Authorization");
-  if (!authHeader) return json({ error: "Missing authorization" }, 401);
-  const callerClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } });
-  const { data: callerData, error: callerError } = await callerClient.auth.getUser();
-  if (callerError || !callerData.user) return json({ error: "Unauthenticated" }, 401);
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
-  const { data: profile } = await adminClient.from("profiles").select("id,role,is_active").eq("id", callerData.user.id).maybeSingle();
-  if (!profile || profile.is_active === false || !allowedRoles.includes(profile.role)) return json({ error: "Your account is not allowed to use Avenmedia chat" }, 403);
   const payload = await request.json().catch(() => null) as Record<string, unknown> | null;
   const action = String(payload?.action ?? "");
+  const publicUploadAction = action === "sign_upload" || action === "complete_upload";
+  const authHeader = request.headers.get("Authorization");
+  let callerId: string | null = null;
+  if (authHeader && authHeader !== `Bearer ${anonKey}`) {
+    const callerClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } });
+    const { data: callerData } = await callerClient.auth.getUser();
+    callerId = callerData.user?.id ?? null;
+  }
+  if (!publicUploadAction) {
+    if (!callerId) return json({ error: "Unauthenticated" }, 401);
+    const { data: profile } = await adminClient.from("profiles").select("id,role,is_active").eq("id", callerId).maybeSingle();
+    if (!profile || profile.is_active === false || !allowedRoles.includes(profile.role)) return json({ error: "Your account is not allowed to use Avenmedia chat" }, 403);
+  }
 
   if (action === "create_chat_message") {
     const recipientId = String(payload?.recipientId ?? "");
@@ -76,7 +82,7 @@ Deno.serve(async (request) => {
     const { data: link } = await adminClient.from("task_upload_links").select("token,task_id,client_name,expires_at,revoked_at").eq("token", token).maybeSingle();
     if (!link || link.revoked_at || new Date(link.expires_at).getTime() <= Date.now()) return json({ error: "Upload link expired or invalid" }, 410);
     const asset = (payload?.asset ?? {}) as Record<string, unknown>;
-    const { data: upload, error } = await adminClient.from("client_uploads").insert({ client_name: link.client_name, file_url: String(asset.secure_url ?? ""), secure_url: String(asset.secure_url ?? ""), cloudinary_public_id: String(asset.public_id ?? ""), resource_type: String(asset.resource_type ?? "auto"), bytes: Number(asset.bytes ?? 0), format: String(asset.format ?? ""), task_id: link.task_id, uploaded_by: callerData.user.id }).select("id,client_name,secure_url,cloudinary_public_id,resource_type,bytes,format,task_id,uploaded_at,uploaded_by").single();
+    const { data: upload, error } = await adminClient.from("client_uploads").insert({ client_name: link.client_name, file_url: String(asset.secure_url ?? ""), secure_url: String(asset.secure_url ?? ""), cloudinary_public_id: String(asset.public_id ?? ""), resource_type: String(asset.resource_type ?? "auto"), bytes: Number(asset.bytes ?? 0), format: String(asset.format ?? ""), task_id: link.task_id, uploaded_by: callerId }).select("id,client_name,secure_url,cloudinary_public_id,resource_type,bytes,format,task_id,uploaded_at,uploaded_by").single();
     if (error) return json({ error: error.message }, 400);
     return json({ upload }, 201);
   }

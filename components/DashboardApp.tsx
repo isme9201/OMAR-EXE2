@@ -125,9 +125,9 @@ export function DashboardApp({ page }: { page: WorkspacePage }) {
         <aside className={`desktop-rail sticky top-0 h-screen border-l ${dark ? "border-white/10 bg-[#111a18]" : "border-[#d9d0c3] bg-[#efe8de]"} px-4 py-5`}>
           <div className="flex h-full flex-col">
             <Link href="/" className="flex items-center gap-3 px-2 pb-8" aria-label="العودة إلى لوحة الإنتاج">
-              <span className="grid h-11 w-11 place-items-center overflow-hidden rounded-xl bg-[#0b4d3e] shadow-lg shadow-[#0b4d3e]/20"><img src="/manus-storage/photomedia-mark_914adfc6.png" alt="رمز PhotoMedia" className="h-8 w-8 object-contain" /></span>
+              <span className="grid h-11 w-11 place-items-center overflow-hidden rounded-xl bg-[#0b4d3e] shadow-lg shadow-[#0b4d3e]/20"><img src="/manus-storage/photomedia-mark_914adfc6.png" alt="رمز Avenmedia" className="h-8 w-8 object-contain" /></span>
               <span>
-                <strong className="brand-wordmark block" dir="ltr">Photo<span>Media</span></strong>
+                <strong className="brand-wordmark block" dir="ltr">Aven<span>media</span></strong>
                 <span className="font-mono block pt-0.5 text-[9px] tracking-[.13em] text-[#60736a]">PRODUCTION OFFICE</span>
               </span>
             </Link>

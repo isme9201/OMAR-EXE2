@@ -1,5 +1,5 @@
-import { AvenmediaChat } from "@/components/AvenmediaChat";
+import { DashboardApp } from "@/components/DashboardApp";
 
 export default function HomePage() {
-  return <AvenmediaChat />;
+  return <DashboardApp page="overview" />;
 }

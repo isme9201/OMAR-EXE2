@@ -1,5 +1,5 @@
-import { DashboardApp } from "@/components/DashboardApp";
+import { AvenmediaAuthGate } from "@/components/AvenmediaAuthGate";
 
 export default function HomePage() {
-  return <DashboardApp page="overview" />;
+  return <AvenmediaAuthGate page="overview" />;
 }

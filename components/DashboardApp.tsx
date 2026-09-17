@@ -14,6 +14,7 @@ import {
 import type { WorkspacePage } from "@/lib/workspaces";
 import { createWorkspaceRecord, getStudioThemePreference, loadWorkspaceRecords, recordStudioAction, saveStudioThemePreference, updateWorkspaceRecord, type WorkspaceRecord } from "@/lib/supabase-browser";
 import { AvenmediaOperations } from "@/components/AvenmediaOperations";
+import { AvenmediaReports } from "@/components/AvenmediaReports";
 
 type Task = { id: number; recordId?: string; client: string; title: string; stage: string; due: string; owner: string; progress: number; tone: string };
 type ModalKind = "booking" | "magic" | "invoice" | "upload" | null;
@@ -24,6 +25,7 @@ const navItems: { page: WorkspacePage; label: string; icon: LucideIcon; tag?: st
   { page: "clients", label: "العملاء والحجوزات", icon: UsersRound },
   { page: "production", label: "غرفة الإنتاج", icon: Video },
   { page: "finance", label: "المالية", icon: WalletCards },
+  { page: "reports", label: "كشف الحساب", icon: ReceiptText },
   { page: "equipment", label: "المعدات", icon: Camera },
   { page: "team", label: "الفريق والمحادثات", icon: MessageCircleMore },
   { page: "uploads", label: "غرفة الرفع", icon: UploadCloud },
@@ -39,6 +41,7 @@ const pageMeta: Record<WorkspacePage, { eyebrow: string; title: string; descript
   clients: { eyebrow: "العلاقات", title: "العملاء والحجوزات", description: "ملفات عميلة تجمع التاريخ، الميزانية، التسليم، والقرار التالي." },
   production: { eyebrow: "سير العمل", title: "غرفة الإنتاج", description: "كل مشروع في مرحلته الصحيحة، مع ملكية واضحة وموعد تسليم مرئي." },
   finance: { eyebrow: "الدفتر", title: "المالية والمطالبات", description: "صورة تشغيلية للمبالغ، الفواتير، والتحصيل قبل أن تصبح متأخرة." },
+  reports: { eyebrow: "التقارير", title: "كشف الحساب الشهري", description: "المهام المنجزة وغير المنجزة، الحضور، الإيرادات، المصاريف، والصافي مع طباعة PDF." },
   equipment: { eyebrow: "الأصول", title: "المعدات والمخزون", description: "اعرف ما هو متاح، وما هو في الميدان، وما يحتاج عناية قبل الجلسة المقبلة." },
   team: { eyebrow: "الفريق", title: "الفريق والمحادثات", description: "رسائل، حضور، وإعلانات تحافظ على إيقاع الفريق داخل يوم الإنتاج." },
   uploads: { eyebrow: "التسليم", title: "غرفة رفع العميل", description: "روابط آمنة، وصول فوري، وسجل واضح لكل ملف دخل إلى المشروع." },
@@ -176,6 +179,7 @@ export function DashboardApp({ page }: { page: WorkspacePage }) {
           {safePage === "clients" && <ClientsPage query={clientQuery} setQuery={setClientQuery} setModal={setModal} />}
           {safePage === "production" && <ProductionPage tasks={tasks} advanceTask={advanceTask} />}
           {safePage === "finance" && <FinancePage setModal={setModal} />}
+          {safePage === "reports" && <AvenmediaReports />}
           {safePage === "equipment" && <EquipmentPage setNotice={setNotice} />}
           {safePage === "team" && <TeamPage messages={messages} message={message} setMessage={setMessage} submitMessage={submitMessage} />}
           {safePage === "uploads" && <UploadsPage setModal={setModal} />}

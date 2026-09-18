@@ -11,7 +11,7 @@
 <body>
 <main>
   <div class="brand"><div class="mark">✦</div><div><strong>Avenmedia</strong><small>رفع ملفات الزبون بجودة الأصل</small></div></div><div class="line"></div>
-  <h1>ارفع ملفات مشروعك بأمان</h1><p>الرابط خاص بمشروع واحد. الملف يذهب مباشرة إلى Cloudinary ولا يتم كشف أي مفتاح سري داخل هذه الصفحة.</p>
+  <h1>ارفع ملفات مشروعك بأمان</h1><p>الرابط خاص بمشروع واحد. الملف يذهب مباشرة إلى التخزين ولا يتم كشف أي مفتاح سري داخل هذه الصفحة.</p>
   <div class="meta"><span>معرّف الرابط: <b id="tokenView">...</b></span><span id="expiry">رابط موقّع</span></div>
   <label class="drop"><b id="fileName">اختيار الصور أو الفيديو</b><span>يمكن اختيار أكثر من ملف · الدقة الأصلية محفوظة</span><input id="files" type="file" accept="image/*,video/*" multiple /></label>
   <button id="send" class="btn">رفع الملفات إلى Avenmedia</button><div class="bar"><i id="progress"></i></div><div id="status" class="status" hidden></div>
@@ -35,7 +35,7 @@
     try{
       for(let index=0;index<files.files.length;index++){
         const file=files.files[index]; const signed=await api({action:'sign_upload',token}); const form=new FormData(); form.append('file',file); form.append('api_key',signed.apiKey); form.append('timestamp',String(signed.timestamp)); form.append('signature',signed.signature); form.append('folder',signed.folder);
-        const upload=await fetch(`https://api.cloudinary.com/v1_1/${signed.cloudName}/auto/upload`,{method:'POST',body:form}); const asset=await upload.json(); if(!upload.ok) throw new Error(asset.error?.message||'فشل رفع الملف إلى Cloudinary');
+        const upload=await fetch(`https://api.cloudinary.com/v1_1/${signed.cloudName}/auto/upload`,{method:'POST',body:form}); const asset=await upload.json(); if(!upload.ok) throw new Error(asset.error?.message||'فشل رفع الملف إلى التخزين');
         await api({action:'complete_upload',token,asset}); $('progress').style.width=`${Math.round(((index+1)/files.files.length)*100)}%`; show(`تم رفع ${index+1} من ${files.files.length}: ${file.name}`);
       } show('اكتمل الرفع وحُفظت الملفات في Avenmedia. يمكنك إغلاق الصفحة.');
     }catch(error){ console.error('[Avenmedia][client-upload]',error); show(`تعذر إكمال الرفع:\n${error.message||error}`,true); } finally { button.disabled=false; }

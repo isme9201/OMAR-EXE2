@@ -15,22 +15,22 @@ function client(): SupabaseClient | null {
 }
 
 export async function listAvenmediaTasks(): Promise<Result<AvenmediaTask[]>> {
-  const db = client(); if (!db) return empty([], 'Supabase is not configured');
+  const db = client(); if (!db) return empty([], 'قاعدة البيانات غير مهيأة');
   const { data, error } = await db.from('tasks').select('*').order('created_at', { ascending: false });
   const message = error?.message ?? ''; logError('tasks.list', message); return empty((data ?? []) as AvenmediaTask[], message);
 }
 export async function listEmployees(): Promise<Result<Employee[]>> {
-  const db = client(); if (!db) return empty([], 'Supabase is not configured');
+  const db = client(); if (!db) return empty([], 'قاعدة البيانات غير مهيأة');
   const { data, error } = await db.from('profiles').select('id,name,email,role,specialty').order('name');
   const message = error?.message ?? ''; logError('employees.list', message); return empty((data ?? []) as Employee[], message);
 }
 export async function listUploadRecords(): Promise<Result<UploadRecord[]>> {
-  const db = client(); if (!db) return empty([], 'Supabase is not configured');
-  const { data, error } = await db.from('upload_records').select('*').order('created_at', { ascending: false });
+  const db = client(); if (!db) return empty([], 'قاعدة البيانات غير مهيأة');
+  const { data, error } = await db.from('client_uploads').select('*').order('created_at', { ascending: false });
   const message = error?.message ?? ''; logError('uploads.list', message); return empty((data ?? []) as UploadRecord[], message);
 }
 export async function createAvenmediaTask(input: Record<string, unknown>): Promise<Result<AvenmediaTask | null>> {
-  const db = client(); if (!db) return empty(null, 'Supabase is not configured');
+  const db = client(); if (!db) return empty(null, 'قاعدة البيانات غير مهيأة');
   const { employeeIds, ...task } = input;
   const { data, error } = await db.from('tasks').insert(task).select('*').single();
   if (error || !data) { const message = error?.message ?? 'Task creation failed'; logError('tasks.create', message); return empty(null, message); }
@@ -38,7 +38,7 @@ export async function createAvenmediaTask(input: Record<string, unknown>): Promi
   return empty(data as AvenmediaTask);
 }
 export async function updateAvenmediaTask(id: string, input: Record<string, unknown>): Promise<Result<AvenmediaTask | null>> {
-  const db = client(); if (!db) return empty(null, 'Supabase is not configured');
+  const db = client(); if (!db) return empty(null, 'قاعدة البيانات غير مهيأة');
   const { employeeIds, ...task } = input;
   const { data, error } = await db.from('tasks').update(task).eq('id', id).select('*').single();
   if (error || !data) { const message = error?.message ?? 'Task update failed'; logError('tasks.update', message); return empty(null, message); }
@@ -46,12 +46,12 @@ export async function updateAvenmediaTask(id: string, input: Record<string, unkn
   return empty(data as AvenmediaTask);
 }
 export async function deleteAvenmediaTask(id: string): Promise<Result<null>> {
-  const db = client(); if (!db) return empty(null, 'Supabase is not configured');
+  const db = client(); if (!db) return empty(null, 'قاعدة البيانات غير مهيأة');
   const { error } = await db.from('tasks').delete().eq('id', id);
   const message = error?.message ?? ''; logError('tasks.delete', message); return empty(null, message);
 }
 export async function invokeAvenmediaFunction<T>(name: string, body: unknown): Promise<Result<T | null>> {
-  const db = client(); if (!db) return empty(null, 'Supabase is not configured');
+  const db = client(); if (!db) return empty(null, 'قاعدة البيانات غير مهيأة');
   const { data, error } = await db.functions.invoke(name, { body });
   let message = error?.message ?? '';
   if (error && 'context' in error && (error as any).context) { try { const detail = await (error as any).context.json(); if (detail?.error) message = detail.error; } catch {} }

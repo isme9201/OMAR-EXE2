@@ -3,8 +3,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  icons: { icon: "/branding/aven-logo-32.png", apple: "/branding/aven-logo-192.png" },
   title: "Avenmedia | مساحة تسليم الملفات",
-  description: "Secure Arabic-first chat and original-quality file delivery for Avenmedia teams.",
+  description: "Aven Media Production management workspace.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

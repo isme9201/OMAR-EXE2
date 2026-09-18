@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Avenmedia | مساحة تسليم الملفات",
+        "title": "AVEN Media Production | لوحة الإدارة",
         "width": 1400,
         "height": 900,
         "minWidth": 900,
@@ -31,8 +31,8 @@
     "active": true,
     "targets": ["nsis", "dmg", "deb", "appimage"],
     "category": "Business",
-    "shortDescription": "Secure chat and original-quality file delivery for Avenmedia teams.",
-    "longDescription": "Avenmedia connects designers and execution teams through protected Supabase chat and fast original-quality Cloudinary file delivery.",
+    "shortDescription": "AVEN Media Production management workspace.",
+    "longDescription": "AVEN Media Production manages requests, production, finance, portfolios, and secure file delivery.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

@@ -1,59 +1,103 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { supabaseConfig } from '@/lib/supabase-config';
 
 export type Employee = { id: string; name: string; email: string; role: string; specialty?: string | null };
-export type UploadRecord = { id: string; file_name?: string | null; public_url?: string | null; created_at?: string | null; task_id?: string | null };
-export type AvenmediaTask = { id: string; title: string; task_type: string; client_name?: string | null; client_phone?: string | null; description?: string | null; status: string; priority: string; due_at?: string | null; assignments?: Employee[] };
+export type UploadRecord = { id: string; file_name?: string | null; client_name?: string | null; public_url?: string | null; secure_url?: string | null; created_at?: string | null; task_id?: string | null; bytes?: number | null; format?: string | null; resource_type?: string | null };
+export type AvenmediaTask = { id: string; title: string; task_type: string; client_name?: string | null; client_phone?: string | null; description?: string | null; status: string; priority: string; due_at?: string | null; created_at?: string; assignments?: Employee[] };
+export type AvenmediaAccount = { id: string; name: string; account_type: string; opening_balance: number; is_active: boolean };
+export type AvenmediaTransaction = { id: string; account_id: string; direction: 'income' | 'expense'; amount: number; category: string; description: string; transaction_date: string; created_at?: string };
 
 type Result<T> = { data: T; error: string };
 const empty = <T>(data: T, error = ''): Result<T> => ({ data, error });
-function logError(operation: string, error: string) { if (error && typeof console !== 'undefined') console.error(`[Avenmedia][${operation}] ${error}`); }
 
 function client(): SupabaseClient | null {
-  const { url, key } = supabaseConfig();
-  return createClient(url, key);
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  return url && key ? createClient(url, key) : null;
 }
 
 export async function listAvenmediaTasks(): Promise<Result<AvenmediaTask[]>> {
-  const db = client(); if (!db) return empty([], 'قاعدة البيانات غير مهيأة');
-  const { data, error } = await db.from('tasks').select('*').order('created_at', { ascending: false });
-  const message = error?.message ?? ''; logError('tasks.list', message); return empty((data ?? []) as AvenmediaTask[], message);
+  const db = client(); if (!db) return empty([], 'Supabase is not configured');
+  const [{ data, error }, { data: assignments, error: assignmentError }, { data: people, error: peopleError }] = await Promise.all([
+    db.from('tasks').select('*').order('created_at', { ascending: false }),
+    db.from('task_assignments').select('task_id,employee_id'),
+    db.from('profiles').select('id,name,email,role,specialty').order('name'),
+  ]);
+  const employeeMap = new Map(((people ?? []) as Employee[]).map((person) => [person.id, person]));
+  const taskAssignments = new Map<string, Employee[]>();
+  for (const row of (assignments ?? []) as Array<{ task_id: string; employee_id: string }>) {
+    const person = employeeMap.get(row.employee_id); if (!person) continue;
+    taskAssignments.set(row.task_id, [...(taskAssignments.get(row.task_id) ?? []), person]);
+  }
+  const tasks = ((data ?? []) as AvenmediaTask[]).filter((item) => item.task_type !== 'chat').map((item) => ({ ...item, assignments: taskAssignments.get(item.id) ?? [] }));
+  return empty(tasks, error?.message || assignmentError?.message || peopleError?.message || '');
 }
+
 export async function listEmployees(): Promise<Result<Employee[]>> {
-  const db = client(); if (!db) return empty([], 'قاعدة البيانات غير مهيأة');
+  const db = client(); if (!db) return empty([], 'Supabase is not configured');
   const { data, error } = await db.from('profiles').select('id,name,email,role,specialty').order('name');
-  const message = error?.message ?? ''; logError('employees.list', message); return empty((data ?? []) as Employee[], message);
+  return empty((data ?? []) as Employee[], error?.message ?? '');
 }
+
 export async function listUploadRecords(): Promise<Result<UploadRecord[]>> {
-  const db = client(); if (!db) return empty([], 'قاعدة البيانات غير مهيأة');
-  const { data, error } = await db.from('client_uploads').select('*').order('created_at', { ascending: false });
-  const message = error?.message ?? ''; logError('uploads.list', message); return empty((data ?? []) as UploadRecord[], message);
+  const db = client(); if (!db) return empty([], 'Supabase is not configured');
+  const { data, error } = await db.from('client_uploads').select('*').order('uploaded_at', { ascending: false });
+  return empty((data ?? []) as UploadRecord[], error?.message ?? '');
 }
+
 export async function createAvenmediaTask(input: Record<string, unknown>): Promise<Result<AvenmediaTask | null>> {
-  const db = client(); if (!db) return empty(null, 'قاعدة البيانات غير مهيأة');
+  const db = client(); if (!db) return empty(null, 'Supabase is not configured');
   const { employeeIds, ...task } = input;
-  const { data, error } = await db.from('tasks').insert(task).select('*').single();
-  if (error || !data) { const message = error?.message ?? 'Task creation failed'; logError('tasks.create', message); return empty(null, message); }
+  const { data: auth } = await db.auth.getUser();
+  const payload = { ...task, created_by: (task.created_by as string | undefined) ?? auth.user?.id };
+  const { data, error } = await db.from('tasks').insert(payload).select('*').single();
+  if (error || !data) return empty(null, error?.message ?? 'Task creation failed');
   if (Array.isArray(employeeIds) && employeeIds.length) await db.from('task_assignments').insert(employeeIds.map((employee_id) => ({ task_id: data.id, employee_id })));
   return empty(data as AvenmediaTask);
 }
+
 export async function updateAvenmediaTask(id: string, input: Record<string, unknown>): Promise<Result<AvenmediaTask | null>> {
-  const db = client(); if (!db) return empty(null, 'قاعدة البيانات غير مهيأة');
+  const db = client(); if (!db) return empty(null, 'Supabase is not configured');
   const { employeeIds, ...task } = input;
   const { data, error } = await db.from('tasks').update(task).eq('id', id).select('*').single();
-  if (error || !data) { const message = error?.message ?? 'Task update failed'; logError('tasks.update', message); return empty(null, message); }
+  if (error || !data) return empty(null, error?.message ?? 'Task update failed');
   if (Array.isArray(employeeIds)) { await db.from('task_assignments').delete().eq('task_id', id); if (employeeIds.length) await db.from('task_assignments').insert(employeeIds.map((employee_id) => ({ task_id: id, employee_id }))); }
   return empty(data as AvenmediaTask);
 }
+
 export async function deleteAvenmediaTask(id: string): Promise<Result<null>> {
-  const db = client(); if (!db) return empty(null, 'قاعدة البيانات غير مهيأة');
+  const db = client(); if (!db) return empty(null, 'Supabase is not configured');
   const { error } = await db.from('tasks').delete().eq('id', id);
-  const message = error?.message ?? ''; logError('tasks.delete', message); return empty(null, message);
+  return empty(null, error?.message ?? '');
 }
+
+export async function listAvenmediaAccounts(): Promise<Result<AvenmediaAccount[]>> {
+  const db = client(); if (!db) return empty([], 'Supabase is not configured');
+  const { data, error } = await db.from('avenmedia_accounts').select('*').eq('is_active', true).order('name');
+  return empty((data ?? []) as AvenmediaAccount[], error?.message ?? '');
+}
+
+export async function createAvenmediaAccount(input: Pick<AvenmediaAccount, 'name' | 'account_type' | 'opening_balance'>): Promise<Result<AvenmediaAccount | null>> {
+  const db = client(); if (!db) return empty(null, 'Supabase is not configured');
+  const { data: auth } = await db.auth.getUser();
+  const { data, error } = await db.from('avenmedia_accounts').insert({ ...input, created_by: auth.user?.id }).select('*').single();
+  return empty((data ?? null) as AvenmediaAccount | null, error?.message ?? '');
+}
+
+export async function listAvenmediaTransactions(from: string, to: string): Promise<Result<AvenmediaTransaction[]>> {
+  const db = client(); if (!db) return empty([], 'Supabase is not configured');
+  const { data, error } = await db.from('avenmedia_transactions').select('*').gte('transaction_date', from).lte('transaction_date', to).order('transaction_date', { ascending: false });
+  return empty((data ?? []) as AvenmediaTransaction[], error?.message ?? '');
+}
+
+export async function createAvenmediaTransaction(input: Omit<AvenmediaTransaction, 'id' | 'created_at'>): Promise<Result<AvenmediaTransaction | null>> {
+  const db = client(); if (!db) return empty(null, 'Supabase is not configured');
+  const { data: auth } = await db.auth.getUser();
+  const { data, error } = await db.from('avenmedia_transactions').insert({ ...input, created_by: auth.user?.id }).select('*').single();
+  return empty((data ?? null) as AvenmediaTransaction | null, error?.message ?? '');
+}
+
 export async function invokeAvenmediaFunction<T>(name: string, body: unknown): Promise<Result<T | null>> {
-  const db = client(); if (!db) return empty(null, 'قاعدة البيانات غير مهيأة');
-  const { data, error } = await db.functions.invoke(name, { body });
-  let message = error?.message ?? '';
-  if (error && 'context' in error && (error as any).context) { try { const detail = await (error as any).context.json(); if (detail?.error) message = detail.error; } catch {} }
-  logError(`function.${name}`, message); return empty((data ?? null) as T | null, message);
+  const db = client(); if (!db) return empty(null, 'Supabase is not configured');
+  const { data, error } = await db.functions.invoke(name, { body: body as Record<string, unknown> });
+  return empty((data ?? null) as T | null, error?.message ?? '');
 }

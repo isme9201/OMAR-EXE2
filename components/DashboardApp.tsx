@@ -21,6 +21,7 @@ import { RequestSearchCard } from "@/components/RequestSearchCard";
 import { NotificationBell } from "@/components/NotificationBell";
 import { FinanceLedger } from "@/components/FinanceLedger";
 import { EquipmentNotes } from "@/components/EquipmentNotes";
+import { AvenmediaCollaborationCenter } from "@/components/AvenmediaCollaborationCenter";
 
 type Task = { id: number; recordId?: string; client: string; title: string; stage: string; due: string; owner: string; progress: number; tone: string };
 type ModalKind = "booking" | "magic" | "invoice" | "upload" | null;
@@ -32,7 +33,7 @@ const navItems: { page: WorkspacePage; label: string; icon: LucideIcon; tag?: st
   { page: "finance", label: "المالية", icon: WalletCards },
   { page: "reports", label: "كشف الحساب", icon: ReceiptText },
   { page: "equipment", label: "المعدات", icon: Camera },
-  { page: "team", label: "الفريق والمحادثات", icon: MessageCircleMore },
+  { page: "team", label: "الفريق والمحادثات", icon: MessageCircleMore, tag: "CHAT" },
   { page: "uploads", label: "غرفة الرفع", icon: UploadCloud },
   { page: "operations", label: "عمليات Avenmedia", icon: ClipboardList, tag: "NEW" },
 ];
@@ -167,6 +168,7 @@ export function DashboardApp({ page }: { page: WorkspacePage }) {
               <p className={`m-0 max-w-2xl text-sm leading-7 ${dark ? "text-[#b7c7c0]" : "text-[#66736c]"}`}>{meta.description}</p>
             </div>
             <div className="enter-sheet stagger-1 flex items-center gap-2">
+              <button aria-label="رجوع" title="رجوع" onClick={() => window.history.length > 1 ? window.history.back() : window.location.assign("/")} className={`grid h-10 w-10 place-items-center rounded-full border ${dark ? "border-white/10 bg-white/5 text-white" : "border-[#cbd4f5] bg-[#ffffff] text-[#17255f]"}`}><ArrowLeft className="h-[18px]" /></button>
               <NotificationBell />
               <IconButton label="تبديل المظهر" onClick={() => updateTheme(!dark)}><SunMoon className="h-[18px]" /></IconButton>
               <button onClick={() => void recordStudioAction("profile.open", "فتح ملف المستخدم")} className={`flex items-center gap-2 rounded-full border px-2 py-1.5 ${dark ? "border-white/10 bg-white/5" : "border-[#cbd4f5] bg-[#ffffff]"}`}><span className="grid h-7 w-7 place-items-center rounded-full bg-[#c8d7ce] text-xs font-bold text-[#142c9b]">م</span><ChevronDown className="h-4 w-4 text-[#60736a]" /></button>
@@ -181,7 +183,7 @@ export function DashboardApp({ page }: { page: WorkspacePage }) {
           {safePage === "finance" && <FinanceLedger />}
           {safePage === "reports" && <AvenmediaReports />}
           {safePage === "equipment" && <EquipmentNotes />}
-          {safePage === "team" && <TeamPage messages={messages} message={message} setMessage={setMessage} submitMessage={submitMessage} />}
+          {safePage === "team" && <AvenmediaCollaborationCenter />}
           {safePage === "uploads" && <UploadsPage setModal={setModal} />}
           {safePage === "operations" && <AvenmediaOperations />}
           {safePage === "settings" && <SettingsPage dark={dark} setDark={updateTheme} />}

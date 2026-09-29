@@ -62,7 +62,7 @@ Deno.serve(async (request) => {
   if (action === "create_link") {
     const token = crypto.randomUUID().replaceAll("-", "");
     const expiresAt = new Date(Date.now() + Math.min(Number(payload?.ttlHours ?? 48), 168) * 60 * 60 * 1000).toISOString();
-    const { data: link, error } = await adminClient.from("task_upload_links").insert({ token, task_id: typeof payload?.taskId === "string" ? payload.taskId : null, client_name: typeof payload?.clientName === "string" ? payload.clientName : null, expires_at: expiresAt, created_by: callerData.user.id }).select("id,token,task_id,client_name,expires_at").single();
+    const { data: link, error } = await adminClient.from("task_upload_links").insert({ token, task_id: typeof payload?.taskId === "string" ? payload.taskId : null, client_name: typeof payload?.clientName === "string" ? payload.clientName : null, expires_at: expiresAt, created_by: callerId }).select("id,token,task_id,client_name,expires_at").single();
     if (error) return json({ error: error.message }, 400);
     return json({ link }, 201);
   }

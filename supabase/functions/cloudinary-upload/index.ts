@@ -82,7 +82,7 @@ Deno.serve(async (request) => {
     const { data: link } = await adminClient.from("task_upload_links").select("token,task_id,client_name,expires_at,revoked_at").eq("token", token).maybeSingle();
     if (!link || link.revoked_at || new Date(link.expires_at).getTime() <= Date.now()) return json({ error: "Upload link expired or invalid" }, 410);
     const asset = (payload?.asset ?? {}) as Record<string, unknown>;
-    const { data: upload, error } = await adminClient.from("client_uploads").insert({ client_name: link.client_name, file_url: String(asset.secure_url ?? ""), secure_url: String(asset.secure_url ?? ""), cloudinary_public_id: String(asset.public_id ?? ""), resource_type: String(asset.resource_type ?? "auto"), bytes: Number(asset.bytes ?? 0), format: String(asset.format ?? ""), task_id: link.task_id, uploaded_by: callerId }).select("id,client_name,secure_url,cloudinary_public_id,resource_type,bytes,format,task_id,uploaded_at,uploaded_by").single();
+    const { data: upload, error } = await adminClient.from("client_uploads").insert({ file_name: typeof asset.original_filename === "string" ? asset.original_filename : null, client_name: link.client_name, file_url: String(asset.secure_url ?? ""), secure_url: String(asset.secure_url ?? ""), cloudinary_public_id: String(asset.public_id ?? ""), resource_type: String(asset.resource_type ?? "auto"), bytes: Number(asset.bytes ?? 0), format: String(asset.format ?? ""), task_id: link.task_id, uploaded_by: callerId }).select("id,file_name,client_name,secure_url,cloudinary_public_id,resource_type,bytes,format,task_id,uploaded_at,uploaded_by,status,note,viewed_at,viewed_by").single();
     if (error) return json({ error: error.message }, 400);
     return json({ upload }, 201);
   }

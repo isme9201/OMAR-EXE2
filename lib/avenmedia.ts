@@ -1,7 +1,8 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 export type Employee = { id: string; name: string; email: string; role: string; specialty?: string | null };
-export type UploadRecord = { id: string; file_name?: string | null; client_name?: string | null; public_url?: string | null; secure_url?: string | null; created_at?: string | null; task_id?: string | null; bytes?: number | null; format?: string | null; resource_type?: string | null };
+export type UploadStatus = 'new' | 'viewed' | 'in_progress' | 'delivered' | 'needs_reupload';
+export type UploadRecord = { id: string; file_name?: string | null; client_name?: string | null; public_url?: string | null; secure_url?: string | null; created_at?: string | null; uploaded_at?: string | null; task_id?: string | null; bytes?: number | null; format?: string | null; resource_type?: string | null; status?: UploadStatus | null; note?: string | null; viewed_at?: string | null; viewed_by?: string | null };
 export type AvenmediaTask = { id: string; title: string; task_type: string; client_name?: string | null; client_phone?: string | null; description?: string | null; status: string; priority: string; due_at?: string | null; created_at?: string; assignments?: Employee[] };
 export type AvenmediaAccount = { id: string; name: string; account_type: string; opening_balance: number; is_active: boolean };
 export type AvenmediaTransaction = { id: string; account_id: string; direction: 'income' | 'expense'; amount: number; category: string; description: string; transaction_date: string; created_at?: string };
@@ -40,8 +41,17 @@ export async function listEmployees(): Promise<Result<Employee[]>> {
 
 export async function listUploadRecords(): Promise<Result<UploadRecord[]>> {
   const db = client(); if (!db) return empty([], 'Supabase is not configured');
-  const { data, error } = await db.from('client_uploads').select('*').order('uploaded_at', { ascending: false });
+  const { data, error } = await db.from('client_uploads').select('id,file_name,client_name,public_url,secure_url,created_at,uploaded_at,task_id,bytes,format,resource_type,status,note,viewed_at,viewed_by').order('uploaded_at', { ascending: false });
   return empty((data ?? []) as UploadRecord[], error?.message ?? '');
+}
+
+export async function updateUploadRecord(id: string, input: Pick<UploadRecord, 'status' | 'note'>) {
+  const db = client(); if (!db) return empty(null, 'Supabase is not configured');
+  const { data: auth } = await db.auth.getUser();
+  const payload = { ...input, ...(input.status === 'viewed' ? { viewed_at: new Date().toISOString(), viewed_by: auth.user?.id ?? null } : {}) };
+  const { data, error } = await db.from('client_uploads').update(payload).eq('id', id).select('id,status,note,viewed_at,viewed_by').single();
+  if (!error) await db.from('upload_activity').insert({ upload_id: id, action: input.status ? `status.${input.status}` : 'note.update', metadata: input.note ? { note: input.note } : {} });
+  return empty(data as Pick<UploadRecord, 'id' | 'status' | 'note' | 'viewed_at' | 'viewed_by'> | null, error?.message ?? '');
 }
 
 export async function createAvenmediaTask(input: Record<string, unknown>): Promise<Result<AvenmediaTask | null>> {

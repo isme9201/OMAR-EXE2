@@ -2,7 +2,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { supabaseConfig } from '@/lib/supabase-config';
 
 export type WorkspaceRecord = Record<string, unknown> & { id?: string; record_id?: string; record_type?: string; payload?: Record<string, unknown> };
-export type PortfolioElement = { id?: string; element_type: string; content: Record<string, unknown>; [key: string]: unknown };
+export type PortfolioElement = { id: string; element_type: string; content: Record<string, any>; styles: Record<string, any>; x: number; y: number; width: number; height: number; z_index?: number; [key: string]: any };
 export type PortfolioPage = { id: string; slug: string; title: string; description?: string | null; published?: boolean; updated_at?: string | null; [key: string]: unknown };
 
 type SupabaseError = { message?: string; details?: string; hint?: string; code?: string };

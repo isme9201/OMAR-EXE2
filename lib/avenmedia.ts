@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { supabaseConfig } from '@/lib/supabase-config';
 
 export type Employee = { id: string; name: string; email: string; role: string; specialty?: string | null };
 export type UploadStatus = 'new' | 'viewed' | 'in_progress' | 'delivered' | 'needs_reupload';
@@ -11,8 +12,7 @@ type Result<T> = { data: T; error: string };
 const empty = <T>(data: T, error = ''): Result<T> => ({ data, error });
 
 function client(): SupabaseClient | null {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const { url, key } = supabaseConfig();
   return url && key ? createClient(url, key) : null;
 }
 

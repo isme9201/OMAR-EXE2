@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import type { WorkspacePage } from "@/lib/workspaces";
 import { createWorkspaceRecord, getStudioThemePreference, loadWorkspaceRecords, recordStudioAction, saveStudioThemePreference, updateWorkspaceRecord, type WorkspaceRecord } from "@/lib/supabase-browser";
+import { invokeAvenmediaFunction } from "@/lib/avenmedia";
 import { AvenmediaOperations } from "@/components/AvenmediaOperations";
 import { AvenmediaReports } from "@/components/AvenmediaReports";
 import { RequestManagement } from "@/components/RequestManagement";
@@ -104,11 +105,15 @@ export function DashboardApp({ page }: { page: WorkspacePage }) {
     setMessage("");
     setNotice("أُرسلت الرسالة إلى قناة الإنتاج.");
   }
-  function createMagicLink() {
-    const link = "studio.local/u/CR8-72K";
-    navigator.clipboard?.writeText(link);
-    void recordStudioAction("uploads.magic_link.create", "إنشاء رابط رفع آمن", { expiresInHours: 72 });
-    setNotice("تم إنشاء رابط رفع آمن ونسخه. ينتهي بعد 72 ساعة.");
+  async function createMagicLink() {
+    setNotice("جارٍ إنشاء رابط رفع حقيقي من Supabase…");
+    const result = await invokeAvenmediaFunction<{ link?: { token: string; expires_at?: string; id?: string } }>("cloudinary-upload", { action: "create_link", ttlHours: 72 });
+    const token = result.data?.link?.token;
+    if (result.error || !token) { setNotice(result.error || "تعذر إنشاء رابط الرفع"); return; }
+    const link = `https://avenmedia.pages.dev/upload?token=${encodeURIComponent(token)}`;
+    await navigator.clipboard?.writeText(link);
+    void recordStudioAction("uploads.magic_link.create", "إنشاء رابط رفع آمن", { expiresInHours: 72, linkId: result.data?.link?.id });
+    setNotice(`تم إنشاء الرابط ونسخه. صالح لمدة 72 ساعة: ${link}`);
     setModal(null);
   }
   function createRecord(kind: ModalKind) {

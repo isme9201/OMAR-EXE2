@@ -66,6 +66,6 @@ export async function saveStudioThemePreference(theme: string) {
   return db.from('studio_preferences').upsert({ actor_email: actorEmail, theme });
 }
 export async function getPrivatePortfolioMediaUrl(path: string) {
-  const { data, error } = await getSupabaseBrowserClient().storage.from('portfolio').createSignedUrl(path, 3600);
+  const { data, error } = await getSupabaseBrowserClient().storage.from('portfolio-media').createSignedUrl(path, 3600);
   return { url: data?.signedUrl ?? '', error: formatSupabaseError(error) };
 }

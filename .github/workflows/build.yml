@@ -6,11 +6,31 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+
+env:
+  RELEASE_TAG: v2.0.0-build-${{ github.run_number }}
 
 jobs:
+  prepare-release:
+    name: Prepare GitHub release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: Avenmedia v2.0.0 build ${{ github.run_number }}
+          body: |
+            Avenmedia cross-platform release from `${{ github.ref_name }}`.
+            macOS is ad-hoc signed until Apple Developer signing secrets are configured.
+            Windows is built on the native Windows runner.
+          draft: true
+          prerelease: true
+
   build-windows:
     name: Build Windows NSIS
+    needs: prepare-release
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
@@ -28,30 +48,21 @@ jobs:
       - name: Generate valid Tauri icons
         shell: bash
         run: pnpm tauri icon src-tauri/icons/source.svg
-      - name: Debug - Find problematic JS files
-        shell: bash
-        run: |
-          echo "🔍 جاري فحص ملفات الإعدادات بحثاً عن الخطأ النحوي..."
-          for file in *.js; do
-            if [ -f "$file" ]; then
-              echo "📄 فحص الملف: $file"
-              head -n 2 "$file"
-              echo "------------------------"
-            fi
-          done
       - name: Build Web App
         run: pnpm build
       - name: Build Windows NSIS
         run: pnpm tauri build --bundles nsis
-      - uses: actions/upload-artifact@v4
+      - name: Upload Windows installer to release
+        uses: softprops/action-gh-release@v2
         with:
-          name: Avenmedia-Windows-x64
-          path: src-tauri/target/**/release/bundle/nsis/**
-          if-no-files-found: error
-          compression-level: 0
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: src-tauri/target/**/release/bundle/nsis/*
+          draft: true
+          prerelease: true
 
   build-macos:
     name: Build macOS DMG
+    needs: prepare-release
     runs-on: macos-latest
     timeout-minutes: 30
     steps:
@@ -67,7 +78,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Generate valid Tauri icons
-        shell: bash
         run: pnpm tauri icon src-tauri/icons/source.svg
       - name: Build Web App
         run: pnpm build
@@ -75,15 +85,17 @@ jobs:
         run: pnpm tauri build --bundles dmg
         env:
           APPLE_SIGNING_IDENTITY: "-"
-      - uses: actions/upload-artifact@v4
+      - name: Upload macOS DMG to release
+        uses: softprops/action-gh-release@v2
         with:
-          name: Avenmedia-macOS
-          path: src-tauri/target/**/release/bundle/dmg/**
-          if-no-files-found: error
-          compression-level: 0
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: src-tauri/target/**/release/bundle/dmg/*
+          draft: true
+          prerelease: true
 
   build-linux:
     name: Build Linux DEB and AppImage
+    needs: prepare-release
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -103,23 +115,24 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Generate valid Tauri icons
-        shell: bash
         run: pnpm tauri icon src-tauri/icons/source.svg
       - name: Build Web App
         run: pnpm build
       - name: Build Linux packages
         run: pnpm tauri build --bundles deb,appimage
-      - uses: actions/upload-artifact@v4
+      - name: Upload Linux packages to release
+        uses: softprops/action-gh-release@v2
         with:
-          name: Avenmedia-Linux-amd64
-          path: |
-            src-tauri/target/**/release/bundle/deb/**
-            src-tauri/target/**/release/bundle/appimage/**
-          if-no-files-found: error
-          compression-level: 0
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: |
+            src-tauri/target/**/release/bundle/deb/*
+            src-tauri/target/**/release/bundle/appimage/*
+          draft: true
+          prerelease: true
 
   build-web:
     name: Build web static export
+    needs: prepare-release
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -135,56 +148,13 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Build web export
         run: pnpm build
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Avenmedia-Web
-          path: out/**
-          if-no-files-found: error
-          compression-level: 6
-
-  publish-release:
-    name: Publish release assets
-    needs: [build-windows, build-macos, build-linux, build-web]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Download Windows artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: Avenmedia-Windows-x64
-          path: release-assets/windows
-      - name: Download macOS artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: Avenmedia-macOS
-          path: release-assets/macos
-      - name: Download Linux artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: Avenmedia-Linux-amd64
-          path: release-assets/linux
-      - name: Download web artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: Avenmedia-Web
-          path: release-assets/web
-      - name: Package release assets with unique names
+      - name: Package web export
         shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p release-packages
-          (cd release-assets/windows && zip -qr ../../release-packages/Avenmedia-Windows-x64.zip .)
-          (cd release-assets/macos && zip -qr ../../release-packages/Avenmedia-macOS.zip .)
-          (cd release-assets/linux && zip -qr ../../release-packages/Avenmedia-Linux-amd64.zip .)
-          (cd release-assets/web && zip -qr ../../release-packages/Avenmedia-Web.zip .)
-          ls -lh release-packages
-      - uses: softprops/action-gh-release@v2
+        run: zip -qr Avenmedia-Web.zip out
+      - name: Upload web export to release
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: v2.0.0-build-${{ github.run_number }}
-          name: Avenmedia v2.0.0 build ${{ github.run_number }}
-          body: |
-            Automated Avenmedia release with uniquely packaged Windows NSIS, macOS DMG, Linux DEB/AppImage, and web static export.
-          draft: false
-          prerelease: false
-          files: release-packages/*.zip
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: Avenmedia-Web.zip
+          draft: true
+          prerelease: true

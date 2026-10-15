@@ -9,7 +9,7 @@ import {
   ClipboardList, Clock3, Command, Download, FileImage, FilePlus2, FolderOpen, Gauge, Grid2X2,
   ImagePlus, Inbox, Landmark, Link2, ListFilter, LockKeyhole, MessageCircleMore, MoreHorizontal,
   PackageCheck, Plus, ReceiptText, Search, Send, Settings2, ShieldCheck, SlidersHorizontal, Sparkles,
-  SunMoon, UploadCloud, UsersRound, Video, WalletCards, Wrench, X, Zap
+  SunMoon, UploadCloud, UsersRound, Video, WalletCards, Wrench, X, Zap, ChevronUp
 } from "lucide-react";
 import type { WorkspacePage } from "@/lib/workspaces";
 import { createWorkspaceRecord, getStudioThemePreference, loadWorkspaceRecords, recordStudioAction, saveStudioThemePreference, updateWorkspaceRecord, type WorkspaceRecord } from "@/lib/supabase-browser";
@@ -78,9 +78,23 @@ export function DashboardApp({ page }: { page: WorkspacePage }) {
   const [records, setRecords] = useState<WorkspaceRecord[]>([]);
   const [clientQuery, setClientQuery] = useState("");
   const [dataLoading, setDataLoading] = useState(true);
+  const [showScrollTop, setShowScrollTop] = useState(false);
 
   useEffect(() => { let cancelled = false; void getStudioThemePreference().then((theme) => { if (!cancelled && theme) { setDark(theme === "dark"); window.localStorage.setItem("photomedia-theme", theme); } }); return () => { cancelled = true; }; }, []);
   useEffect(() => { let cancelled = false; void loadWorkspaceRecords().then(({ data, error }) => { if (cancelled) return; setRecords(data); setTasks(data.filter((record) => record.record_type === "task").map((record, index) => ({ recordId: record.id, id: index + 1, client: String((record.payload ?? {}).client ?? "بدون عميل"), title: String((record.payload ?? {}).title ?? "مهمة جديدة"), stage: String((record.payload ?? {}).stage ?? "جديدة"), due: String((record.payload ?? {}).due ?? "غير محدد"), owner: String((record.payload ?? {}).owner ?? "غير مسند"), progress: Number((record.payload ?? {}).progress ?? 0), tone: String((record.payload ?? {}).tone ?? "bg-[#e6ebff] text-[#142c9b]") }))); setMessages(data.filter((record) => record.record_type === "message").map((record) => String((record.payload ?? {}).message ?? "" )).filter(Boolean)); setDataLoading(false); if (error === "unauthenticated") setNotice("سجل دخولك لعرض بيانات الاستوديو من قاعدة البيانات"); else if (error && error !== "supabase-unavailable") setNotice(`تعذر تحميل بيانات قاعدة البيانات: ${error}`); else if (!data.length) setNotice("لا توجد سجلات بعد — ابدأ بإضافة أول حجز أو مهمة"); }); return () => { cancelled = true; }; }, []);
+  useEffect(() => {
+    const onScroll = () => setShowScrollTop(window.scrollY > 520);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        document.querySelector<HTMLInputElement>("[data-global-search]")?.focus();
+      }
+      if (event.key === "Escape") document.querySelector<HTMLInputElement>("[data-global-search]")?.blur();
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("keydown", onKeyDown);
+    return () => { window.removeEventListener("scroll", onScroll); window.removeEventListener("keydown", onKeyDown); };
+  }, []);
   const updateTheme = (value: boolean) => { setDark(value); window.localStorage.setItem("photomedia-theme", value ? "dark" : "light"); void saveStudioThemePreference(value ? "dark" : "light"); void recordStudioAction("studio.theme.update", "تحديث مظهر الاستوديو", { theme: value ? "dark" : "light" }); };
 
   const meta = pageMeta[page] ?? pageMeta.overview;
@@ -151,7 +165,7 @@ export function DashboardApp({ page }: { page: WorkspacePage }) {
               {navItems.map((item) => {
                 const Icon = item.icon;
                 const active = safePage === item.page;
-                return <Link key={item.page} href={item.page === "overview" ? "/" : `/${item.page}`} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${active ? "bg-[#142c9b] text-white shadow-md shadow-[#142c9b]/15" : dark ? "text-[#d5e0db] hover:bg-white/7" : "text-[#41534b] hover:bg-white/65"}`}>
+                return <Link key={item.page} aria-current={active ? "page" : undefined} title={item.label} href={item.page === "overview" ? "/" : `/${item.page}`} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${active ? "bg-[#142c9b] text-white shadow-md shadow-[#142c9b]/15" : dark ? "text-[#d5e0db] hover:bg-white/7" : "text-[#41534b] hover:bg-white/65"}`}>
                   <Icon className="h-[17px] w-[17px] stroke-[1.8]" /> <span className="flex-1">{item.label}</span>{item.tag && <span className={`font-mono rounded-md px-1.5 py-0.5 text-[10px] ${active ? "bg-white/15 text-white" : "bg-[#dfe8e2] text-[#142c9b]"}`}>{item.tag}</span>}
                 </Link>;
               })}
@@ -196,6 +210,7 @@ export function DashboardApp({ page }: { page: WorkspacePage }) {
         </section>
       </div>
       {modal && <ActionModal kind={modal} close={() => setModal(null)} onCreate={modal === "magic" ? createMagicLink : () => createRecord(modal)} />}
+      {showScrollTop && <button type="button" aria-label="العودة إلى أعلى الصفحة" title="العودة إلى أعلى الصفحة" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} className="fixed bottom-6 left-6 z-40 grid h-11 w-11 place-items-center rounded-full bg-[#142c9b] text-white shadow-xl transition hover:-translate-y-1"><ChevronUp className="h-5" /></button>}
     </main>
   );
 }

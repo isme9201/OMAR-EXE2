@@ -63,6 +63,14 @@ export default function PortfolioEditor() {
     return () => { cancelled = true; };
   }, [supabase]);
 
+  useEffect(() => {
+    const onBeforeUnload = (event: BeforeUnloadEvent) => { if (dirty) { event.preventDefault(); event.returnValue = ""; } };
+    const onKeyDown = (event: KeyboardEvent) => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); if (dirty && canEdit && !saving) void save(); } };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    window.addEventListener("keydown", onKeyDown);
+    return () => { window.removeEventListener("beforeunload", onBeforeUnload); window.removeEventListener("keydown", onKeyDown); };
+  }, [canEdit, dirty, saving]);
+
   const commit = useCallback((next: DraftElement[]) => { if (!canEdit) { setNotice("صلاحية العرض فقط: اطلب دور محرر من مدير الفريق"); return; } setPast((history) => [...history.slice(-49), clone(elements)]); setFuture([]); setElements(next); }, [canEdit, elements]);
   const updateSelected = useCallback((patch: Partial<DraftElement> & { content?: Record<string, string>; styles?: Record<string, unknown> }) => { if (!selected) return; commit(elements.map((element) => element.id === selected.id ? { ...element, ...patch } : element)); }, [commit, elements, selected]);
   const updateFrame = useCallback((patch: Partial<Frame>) => { if (!selected || !canEdit) return; const current = frameFor(selected, breakpoint); const next = { ...current, ...patch }; commit(elements.map((element) => element.id === selected.id ? { ...element, x: breakpoint === "desktop" ? next.x : element.x, y: breakpoint === "desktop" ? next.y : element.y, width: breakpoint === "desktop" ? next.width : element.width, height: breakpoint === "desktop" ? next.height : element.height, styles: { ...element.styles, responsive: { ...((element.styles.responsive as Record<string, Frame> | undefined) ?? {}), [breakpoint]: next } } } : element)); }, [breakpoint, canEdit, commit, elements, selected]);
@@ -78,19 +86,23 @@ export default function PortfolioEditor() {
     if (!canEdit) { setNotice("لا تملك صلاحية حفظ التغييرات"); return; }
     if (!supabase) { setNotice("أضف إعدادات قاعدة البيانات العامة لتفعيل الحفظ السحابي"); return; }
     setSaving(true);
-    const pagePayload = { slug: page.slug, title: page.title, description: page.description, published: page.published };
-    const pageResult = page.id ? await supabase.from("portfolio_pages").update(pagePayload).eq("id", page.id).select("id,slug,title,description,published,updated_at").single() : await supabase.from("portfolio_pages").insert(pagePayload).select("id,slug,title,description,published,updated_at").single();
-    if (pageResult.error || !pageResult.data) { setNotice(`تعذر حفظ الصفحة: ${pageResult.error?.message ?? "تحقق من تسجيل الدخول"}`); setSaving(false); return; }
-    const savedPage = pageResult.data as PortfolioPage;
-    const rows = elements.map((element) => ({ ...element, page_id: savedPage.id }));
-    if (deletedIds.length) {
-      const deleteResult = await supabase.from("portfolio_elements").delete().in("id", deletedIds);
-      if (deleteResult.error) { setNotice(`تعذر حذف العناصر: ${deleteResult.error.message}`); setSaving(false); return; }
-    }
-    const elementResult = rows.length ? await supabase.from("portfolio_elements").upsert(rows, { onConflict: "id" }) : { error: null };
-    if (elementResult.error) { setNotice(`تعذر حفظ العناصر: ${elementResult.error.message}`); setSaving(false); return; }
-    await supabase.from("portfolio_revisions").insert({ page_id: savedPage.id, revision_number: Date.now(), snapshot: { page: savedPage, elements: rows } });
-    setPage(savedPage); setSavedPublished(savedPage.published); setElements(rows); setSavedElements(clone(rows)); setDeletedIds([]); setPast([]); setFuture([]); setNotice("تم حفظ النسخة الجديدة في قاعدة البيانات"); setSaving(false);
+    try {
+      const pagePayload = { slug: page.slug, title: page.title, description: page.description, published: page.published };
+      const pageResult = page.id ? await supabase.from("portfolio_pages").update(pagePayload).eq("id", page.id).select("id,slug,title,description,published,updated_at").single() : await supabase.from("portfolio_pages").insert(pagePayload).select("id,slug,title,description,published,updated_at").single();
+      if (pageResult.error || !pageResult.data) { setNotice(`تعذر حفظ الصفحة: ${pageResult.error?.message ?? "تحقق من تسجيل الدخول"}`); return; }
+      const savedPage = pageResult.data as PortfolioPage;
+      const rows = elements.map((element) => ({ ...element, page_id: savedPage.id }));
+      if (deletedIds.length) {
+        const deleteResult = await supabase.from("portfolio_elements").delete().in("id", deletedIds);
+        if (deleteResult.error) { setNotice(`تعذر حذف العناصر: ${deleteResult.error.message}`); return; }
+      }
+      const elementResult = rows.length ? await supabase.from("portfolio_elements").upsert(rows, { onConflict: "id" }) : { error: null };
+      if (elementResult.error) { setNotice(`تعذر حفظ العناصر: ${elementResult.error.message}`); return; }
+      const revisionResult = await supabase.from("portfolio_revisions").insert({ page_id: savedPage.id, revision_number: Date.now(), snapshot: { page: savedPage, elements: rows } });
+      if (revisionResult.error) { setNotice(`تم حفظ الصفحة والعناصر، لكن تعذر حفظ سجل النسخة: ${revisionResult.error.message}`); return; }
+      setPage(savedPage); setSavedPublished(savedPage.published); setElements(rows); setSavedElements(clone(rows)); setDeletedIds([]); setPast([]); setFuture([]); setNotice("تم حفظ النسخة الجديدة في قاعدة البيانات");
+    } catch (caught) { setNotice(`تعذر إكمال الحفظ: ${caught instanceof Error ? caught.message : "خطأ غير متوقع"}`); }
+    finally { setSaving(false); }
   };
 
   const discard = () => { setPage((current) => ({ ...current, published: savedPublished })); setElements(clone(savedElements)); setDeletedIds([]); setPast([]); setFuture([]); setNotice("تم تجاهل التعديلات المحلية"); };
@@ -99,7 +111,7 @@ export default function PortfolioEditor() {
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>, element: DraftElement) => { if (!canEdit) return; const bounds = event.currentTarget.parentElement?.getBoundingClientRect(); if (!bounds) return; const frame = frameFor(element, breakpoint); setSelectedId(element.id); drag.current = { id: element.id, offsetX: event.clientX - bounds.left - frame.x, offsetY: event.clientY - bounds.top - frame.y, startElements: clone(elements) }; event.currentTarget.setPointerCapture(event.pointerId); };
   const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => { if (!drag.current || !canEdit) return; const bounds = event.currentTarget.parentElement?.getBoundingClientRect(); if (!bounds) return; const active = drag.current; setElements((currentElements) => currentElements.map((element) => { if (element.id !== active.id) return element; const frame = frameFor(element, breakpoint); const nextFrame = { ...frame, x: Math.max(10, event.clientX - bounds.left - active.offsetX), y: Math.max(10, event.clientY - bounds.top - active.offsetY) }; return breakpoint === "desktop" ? { ...element, x: nextFrame.x, y: nextFrame.y } : { ...element, styles: { ...element.styles, responsive: { ...((element.styles.responsive as Record<string, Frame> | undefined) ?? {}), [breakpoint]: nextFrame } } }; })); };
   const onPointerUp = () => { if (drag.current && JSON.stringify(drag.current.startElements) !== JSON.stringify(elements)) { setPast((history) => [...history.slice(-49), clone(drag.current!.startElements)]); setFuture([]); } drag.current = null; };
-  const uploadImage = async (file: File) => { if (!supabase || !selected || selected.element_type !== "image") { setNotice("اختر عنصراً بصرياً واربط قاعدة البيانات لرفع صورة"); return; } const path = `${page.slug}/${uid()}-${file.name}`; const result = await supabase.storage.from("portfolio-media").upload(path, file, { upsert: true }); if (result.error) { setNotice(`تعذر رفع الصورة: ${result.error.message}`); return; } const signed = await getPrivatePortfolioMediaUrl(path); if (!signed.url) { setNotice(`تم رفع الصورة لكن تعذر إنشاء رابط خاص: ${signed.error ?? "خطأ غير معروف"}`); return; } updateSelected({ content: { ...selected.content, src: signed.url, storagePath: path, alt: file.name } }); setNotice("تم رفع الصورة الخاصة وتسجيل مسارها في العنصر"); };
+  const uploadImage = async (file: File) => { if (!supabase || !selected || selected.element_type !== "image") { setNotice("اختر عنصراً بصرياً واربط قاعدة البيانات لرفع صورة"); return; } if (!file.type.startsWith("image/")) { setNotice("اختر ملف صورة صالحاً"); return; } if (file.size > 25 * 1024 * 1024) { setNotice("حجم الصورة يجب ألا يتجاوز 25MB"); return; } const path = `${page.slug}/${uid()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "-")}`; const result = await supabase.storage.from("portfolio-media").upload(path, file, { upsert: true }); if (result.error) { setNotice(`تعذر رفع الصورة: ${result.error.message}`); return; } const signed = await getPrivatePortfolioMediaUrl(path); if (!signed.url) { setNotice(`تم رفع الصورة لكن تعذر إنشاء رابط خاص: ${signed.error ?? "خطأ غير معروف"}`); return; } updateSelected({ content: { ...selected.content, src: signed.url, storagePath: path, alt: file.name } }); setNotice("تم رفع الصورة الخاصة وتسجيل مسارها في العنصر"); };
 
   if (loading) return <main dir="rtl" className="grid min-h-screen place-items-center bg-[#f7f9ff] p-6 text-center text-[#080d24]"><div><p className="font-mono text-[10px] tracking-[.16em] text-[#58617e]">PORTFOLIO / DATABASE</p><h1 className="font-naskh mt-3 text-3xl font-bold">جار تحميل المحفظة…</h1><p className="mt-2 text-sm text-[#58617e]">يتم جلب الصفحة والعناصر من قاعدة البيانات.</p></div></main>;
   if (!page.id) return <main dir="rtl" className="grid min-h-screen place-items-center bg-[#f7f9ff] p-6 text-center text-[#080d24]"><div className="max-w-md rounded-[24px] border border-[#cbd4f5] bg-[#ffffff] p-8"><p className="font-mono text-[10px] tracking-[.16em] text-[#3159d8]">PORTFOLIO / EMPTY</p><h1 className="font-naskh mt-3 text-3xl font-bold">لا توجد صفحة محفظة بعد.</h1><p className="mt-2 text-sm leading-7 text-[#58617e]">أنشئ الصفحة الأولى من قاعدة البيانات أو اطلب من مدير الفريق تهيئة مساحة المحفظة قبل التحرير.</p></div></main>;

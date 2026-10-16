@@ -1,5 +1,6 @@
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { PDFDocument, rgb, type PDFImage } from 'pdf-lib';
 import { getAuthClient } from '@/lib/avenmedia-auth';
+import { embedAvenmediaFonts, enableArabicPdfText } from '@/lib/pdf-arabic';
 
 export type RequestRow = {
   id: string; title: string; client_name: string | null; client_phone: string | null;
@@ -10,7 +11,11 @@ export type RequestRow = {
   assignments?: { employee_id: string; profile?: { id: string; name: string; specialty: string | null } | null }[];
 };
 
-function errorText(error: unknown) { if (!error) return ''; const e = error as { message?: string; details?: string; hint?: string; code?: string }; return [e.message, e.details, e.hint, e.code].filter(Boolean).join(' — ') || JSON.stringify(error); }
+function errorText(error: unknown) {
+  if (!error) return '';
+  const e = error as { message?: string; details?: string; hint?: string; code?: string };
+  return [e.message, e.details, e.hint, e.code].filter(Boolean).join(' — ') || JSON.stringify(error);
+}
 function db() { return getAuthClient() as any; }
 
 export async function listRequests(query = '') {
@@ -32,13 +37,37 @@ export async function saveRequest(input: Record<string, unknown>, id?: string) {
   return { data: result.data as RequestRow, error: '' };
 }
 
-export async function removeRequest(id: string) { const result = await db().from('tasks').delete().eq('id', id); if (result.error) console.error('[Avenmedia][requests.delete]', result.error); return { error: errorText(result.error) }; }
+export async function removeRequest(id: string) {
+  const result = await db().from('tasks').delete().eq('id', id);
+  if (result.error) console.error('[Avenmedia][requests.delete]', result.error);
+  return { error: errorText(result.error) };
+}
 
 export async function makeEmployeeSchedulePdf(employeeName: string, requests: RequestRow[]) {
-  const pdf = await PDFDocument.create(); const font = await pdf.embedFont(StandardFonts.Helvetica); const bold = await pdf.embedFont(StandardFonts.HelveticaBold); let page = pdf.addPage([595, 842]); let y = 735;
-  const header = () => { page.drawRectangle({ x: 0, y: 760, width: 595, height: 82, color: rgb(.06, .10, .30) }); page.drawText('AVENMEDIA', { x: 45, y: 803, size: 25, font: bold, color: rgb(1, 1, 1) }); page.drawText('PRODUCTION WORK SCHEDULE', { x: 45, y: 783, size: 10, font, color: rgb(.72, .78, 1) }); page.drawText(employeeName.slice(0, 40), { x: 410, y: 803, size: 12, font: bold, color: rgb(1, 1, 1) }); };
+  const pdf = await PDFDocument.create();
+  const pdfFonts = await embedAvenmediaFonts(pdf);
+  enableArabicPdfText(pdf, pdfFonts);
+  const { font, bold } = pdfFonts;
+  let logo: PDFImage | null = null;
+  try { const response = await fetch('/branding/aven-logo-192.png'); if (response.ok) logo = await pdf.embedPng(new Uint8Array(await response.arrayBuffer())); } catch { /* continue without decorative logo */ }
+  let page = pdf.addPage([595, 842]); let y = 735;
+  const header = () => {
+    page.drawRectangle({ x: 0, y: 760, width: 595, height: 82, color: rgb(.06, .10, .30) });
+    page.drawText('AVENMEDIA', { x: 45, y: 803, size: 25, font: bold, color: rgb(1, 1, 1) });
+    page.drawText('PRODUCTION WORK SCHEDULE', { x: 45, y: 783, size: 10, font, color: rgb(.72, .78, 1) });
+    page.drawText(employeeName.slice(0, 40), { x: 365, y: 803, size: 12, font: bold, color: rgb(1, 1, 1) });
+    if (logo) page.drawImage(logo, { x: 510, y: 777, width: 42, height: 42 });
+  };
   const newPage = () => { page = pdf.addPage([595, 842]); y = 735; header(); };
-  header(); page.drawText(`Printed: ${new Date().toLocaleDateString()}`, { x: 45, y: y, size: 10, font, color: rgb(.36, .40, .52) }); y -= 35;
-  for (const item of requests) { if (y < 110) newPage(); page.drawRectangle({ x: 42, y: y - 52, width: 510, height: 72, color: rgb(1, 1, 1), borderColor: rgb(.80, .84, .93), borderWidth: 1 }); page.drawRectangle({ x: 42, y: y - 52, width: 6, height: 72, color: rgb(.32, .40, .91) }); page.drawText(`${item.title || 'طلب بدون عنوان'} — ${item.client_name || 'بدون عميل'}`.slice(0, 78), { x: 62, y, size: 12, font: bold, color: rgb(.06, .10, .30) }); page.drawText(`Status: ${item.status}   |   Due: ${item.due_at ? new Date(item.due_at).toLocaleString() : '—'}`.slice(0, 95), { x: 62, y: y - 20, size: 9, font, color: rgb(.36, .40, .52) }); page.drawText(`Details: ${(item.description || '—').slice(0, 90)}`, { x: 62, y: y - 37, size: 9, font, color: rgb(.36, .40, .52) }); y -= 92; }
+  header(); page.drawText(`تاريخ الطباعة: ${new Date().toLocaleDateString('ar-IQ')}`, { x: 45, y, size: 10, font, color: rgb(.36, .40, .52) }); y -= 35;
+  for (const item of requests) {
+    if (y < 110) newPage();
+    page.drawRectangle({ x: 42, y: y - 52, width: 510, height: 72, color: rgb(1, 1, 1), borderColor: rgb(.80, .84, .93), borderWidth: 1 });
+    page.drawRectangle({ x: 42, y: y - 52, width: 6, height: 72, color: rgb(.32, .40, .91) });
+    page.drawText(`${item.title || 'طلب بدون عنوان'} — ${item.client_name || 'بدون عميل'}`.slice(0, 78), { x: 62, y, size: 12, font: bold, color: rgb(.06, .10, .30) });
+    page.drawText(`الحالة: ${item.status}   |   التسليم: ${item.due_at ? new Date(item.due_at).toLocaleString('ar-IQ') : '—'}`.slice(0, 95), { x: 62, y: y - 20, size: 9, font, color: rgb(.36, .40, .52) });
+    page.drawText(`التفاصيل: ${(item.description || '—').slice(0, 90)}`, { x: 62, y: y - 37, size: 9, font, color: rgb(.36, .40, .52) });
+    y -= 92;
+  }
   return pdf.save();
 }

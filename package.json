@@ -11,8 +11,11 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@pdf-lib/fontkit": "^1.1.1",
     "@supabase/supabase-js": "^2.112.4",
     "@tauri-apps/api": "^2.8.0",
+    "arabic-persian-reshaper": "^1.0.1",
+    "bidi-js": "^1.1.0",
     "drizzle-orm": "^0.45.2",
     "lucide-react": "^0.468.0",
     "mysql2": "^3.24.2",

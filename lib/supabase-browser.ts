@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { supabaseConfig } from '@/lib/supabase-config';
+import { offlineSupabaseFetch } from '@/lib/offline-first';
 
 export type WorkspaceRecord = Record<string, unknown> & { id?: string; record_id?: string; record_type?: string; payload?: Record<string, unknown> };
 export type PortfolioElement = { id: string; element_type: string; content: Record<string, any>; styles: Record<string, any>; x: number; y: number; width: number; height: number; z_index?: number; [key: string]: any };
@@ -17,7 +18,7 @@ let browserClient: SupabaseClient | null = null;
 export function getSupabaseBrowserClient() {
   if (browserClient) return browserClient;
   const { url, key } = supabaseConfig();
-  browserClient = createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+  browserClient = createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }, global: { fetch: offlineSupabaseFetch } });
   return browserClient;
 }
 
@@ -32,8 +33,8 @@ export async function loadWorkspaceRecords(): Promise<{ data: WorkspaceRecord[];
 
 export async function createWorkspaceRecord(recordType: string, payload: Record<string, unknown>) {
   const db = getSupabaseBrowserClient();
-  const { data: auth } = await db.auth.getUser();
-  const actorEmail = auth.user?.email?.trim().toLowerCase();
+  const { data: auth } = await db.auth.getSession();
+  const actorEmail = auth.session?.user.email?.trim().toLowerCase();
   if (!actorEmail) return { data: null, error: 'جلسة Supabase غير موجودة؛ سجّل الدخول مرة أخرى' };
   const result = await db.from('workspace_records').insert({ actor_email: actorEmail, record_type: recordType, payload }).select('*').single();
   if (result.error) console.error('[Avenmedia][workspace_records.insert]', result.error);
@@ -47,8 +48,8 @@ export async function updateWorkspaceRecord(id: string, record: WorkspaceRecord)
 
 export async function recordStudioAction(action: string, label: string, payload: Record<string, unknown> = {}) {
   const db = getSupabaseBrowserClient();
-  const { data: auth } = await db.auth.getUser();
-  const actorEmail = auth.user?.email?.trim().toLowerCase();
+  const { data: auth } = await db.auth.getSession();
+  const actorEmail = auth.session?.user.email?.trim().toLowerCase();
   if (!actorEmail) return { data: null, error: 'جلسة Supabase غير موجودة' };
   const result = await db.from('studio_actions').insert({ actor_email: actorEmail, action, label, payload });
   if (result.error) console.error('[Avenmedia][studio_actions.insert]', result.error);
@@ -56,13 +57,13 @@ export async function recordStudioAction(action: string, label: string, payload:
 }
 
 export async function getStudioThemePreference() {
-  const db = getSupabaseBrowserClient(); const { data: auth } = await db.auth.getUser();
-  const actorEmail = auth.user?.email?.trim().toLowerCase(); if (!actorEmail) return 'light';
+  const db = getSupabaseBrowserClient(); const { data: auth } = await db.auth.getSession();
+  const actorEmail = auth.session?.user.email?.trim().toLowerCase(); if (!actorEmail) return 'light';
   const { data } = await db.from('studio_preferences').select('theme').eq('actor_email', actorEmail).maybeSingle(); return data?.theme ?? 'light';
 }
 export async function saveStudioThemePreference(theme: string) {
-  const db = getSupabaseBrowserClient(); const { data: auth } = await db.auth.getUser();
-  const actorEmail = auth.user?.email?.trim().toLowerCase(); if (!actorEmail) return { error: { message: 'جلسة Supabase غير موجودة' } };
+  const db = getSupabaseBrowserClient(); const { data: auth } = await db.auth.getSession();
+  const actorEmail = auth.session?.user.email?.trim().toLowerCase(); if (!actorEmail) return { error: { message: 'جلسة Supabase غير موجودة' } };
   return db.from('studio_preferences').upsert({ actor_email: actorEmail, theme });
 }
 export async function getPrivatePortfolioMediaUrl(path: string) {

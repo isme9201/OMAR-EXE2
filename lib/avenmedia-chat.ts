@@ -1,4 +1,5 @@
 import { createClient, type User } from '@supabase/supabase-js';
+import { offlineSupabaseFetch } from '@/lib/offline-first';
 
 const PUBLIC_SUPABASE_URL = 'https://tgufcpgrbsaxccbkmvhx.supabase.co';
 const PUBLIC_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRndWZjcGdyYnNheGNjYmttdmh4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODczODU4MDcsImV4cCI6MjEwMjk2MTgwN30.2WlPv_c3Y99n0rd5sFOn0B0xIVI2jxoRFA26gKunmMs';
@@ -21,7 +22,7 @@ export function supabase() {
   if (client) return client;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || PUBLIC_SUPABASE_ANON_KEY;
-  client = createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+  client = createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }, global: { fetch: offlineSupabaseFetch } });
   return client;
 }
 
@@ -40,7 +41,7 @@ async function invoke<T>(db: ReturnType<typeof supabase>, body: Record<string, u
   return data as T;
 }
 
-export async function currentUser(): Promise<User | null> { const db = supabase(); const { data, error } = await db.auth.getUser(); if (error) requestLog('GET', 'auth/user', 'error', error.message); else requestLog('GET', 'auth/user', 'success', data.user ? 'جلسة صالحة' : 'لا توجد جلسة'); return data.user; }
+export async function currentUser(): Promise<User | null> { const db = supabase(); const { data, error } = await db.auth.getSession(); if (error) requestLog('GET', 'auth/session', 'error', error.message); else requestLog('GET', 'auth/session', 'success', data.session?.user ? 'جلسة محلية صالحة' : 'لا توجد جلسة'); return data.session?.user ?? null; }
 export async function profiles() { const db = supabase(); requestLog('GET', 'profiles', 'pending', 'جلب أعضاء الفريق'); const { data, error } = await db.from('profiles').select('id,name,email,role,specialty,is_active').eq('is_active', true).order('name'); requestLog('GET', 'profiles', error ? 'error' : 'success', error?.message ?? `${data?.length ?? 0} عضو`); return { data: (data ?? []) as ChatProfile[], error: error?.message ?? '' }; }
 export async function chatItems() { const db = supabase(); requestLog('GET', 'tasks?task_type=chat', 'pending', 'جلب المحادثات'); const { data, error } = await db.from('tasks').select('id,title,description,created_by,created_at,status,priority,task_type,client_name,client_phone,due_at').eq('task_type', 'chat').order('created_at', { ascending: true }); requestLog('GET', 'tasks?task_type=chat', error ? 'error' : 'success', error?.message ?? `${data?.length ?? 0} رسالة`); return { data: (data ?? []) as ChatItem[], error: error?.message ?? '' }; }
 export async function allTasks() { const db = supabase(); requestLog('GET', 'tasks', 'pending', 'جلب الطلبات والمهام'); const { data, error } = await db.from('tasks').select('id,title,description,created_by,created_at,status,priority,task_type,client_name,client_phone,due_at').order('created_at', { ascending: false }); requestLog('GET', 'tasks', error ? 'error' : 'success', error?.message ?? `${data?.length ?? 0} مهمة`); return { data: (data ?? []) as ChatItem[], error: error?.message ?? '' }; }
@@ -51,8 +52,8 @@ export async function sendChatMessage(recipientId: string, text: string) {
   try { return (await invoke<{ item: ChatItem }>(db, { action: 'create_chat_message', recipientId, text: text.trim() })).item; }
   catch (error) {
     if (!(error instanceof Error) || !error.message.toLowerCase().includes('unknown action')) throw error;
-    const { data: auth } = await db.auth.getUser(); if (!auth.user) throw new Error('يجب تسجيل الدخول أولاً');
-    const { data, error: insertError } = await db.from('tasks').insert({ title: text.trim().slice(0, 80), description: text.trim(), task_type: 'chat', status: 'new', priority: 'normal', created_by: auth.user.id, client_name: recipientId } as never).select('id,title,description,created_by,created_at,status,priority,task_type,client_name,client_phone,due_at').single();
+    const { data: auth } = await db.auth.getSession(); if (!auth.session?.user) throw new Error('يجب تسجيل الدخول أولاً');
+    const { data, error: insertError } = await db.from('tasks').insert({ title: text.trim().slice(0, 80), description: text.trim(), task_type: 'chat', status: 'new', priority: 'normal', created_by: auth.session.user.id, client_name: recipientId } as never).select('id,title,description,created_by,created_at,status,priority,task_type,client_name,client_phone,due_at').single();
     if (insertError || !data) throw insertError ?? new Error('تعذر إرسال الرسالة');
     const assignment = await db.from('task_assignments').insert({ task_id: (data as { id: string }).id, employee_id: recipientId } as never); if (assignment.error && assignment.error.code !== '23505') throw assignment.error;
     requestLog('POST', 'tasks/message-fallback', 'success', 'تم حفظ الرسالة'); return data as ChatItem;

@@ -19,7 +19,7 @@ export function AvenmediaReports() {
   const [downloadUrl, setDownloadUrl] = useState("");
   const load = async () => {
     const db = getAuthClient();
-    if (!db) { setError("Supabase غير مهيأ"); console.error("[Avenmedia][reports] Supabase client unavailable"); return; }
+    if (!db) { setError("التخزين غير مهيأ"); console.error("[Avenmedia][reports] التخزين client unavailable"); return; }
     setBusy(true); setError("");
     const start = `${month}-01`;
     const end = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 1).toISOString();

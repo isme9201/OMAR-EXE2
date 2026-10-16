@@ -3,13 +3,44 @@ name: Build Avenmedia
 on:
   push:
     branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  prepare-release:
+    name: Prepare draft release slot
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release_tag: ${{ steps.tag.outputs.release_tag }}
+    steps:
+      - id: tag
+        shell: bash
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            tag="candidate-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
+          elif [[ "$GITHUB_EVENT_NAME" == "push" && ( "$GITHUB_REF" == "refs/heads/main" || "$GITHUB_REF" == "refs/heads/master" ) ]]; then
+            tag="v2.0.0-build-${GITHUB_RUN_NUMBER}"
+          else
+            tag=""
+          fi
+          echo "release_tag=$tag" >> "$GITHUB_OUTPUT"
+      - name: Create draft release for output assets
+        if: steps.tag.outputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.tag.outputs.release_tag }}
+        run: gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --title "Avenmedia candidate $GITHUB_RUN_NUMBER" --notes "Automated candidate build. Manual workflow runs remain drafts until reviewed."
+
   build-windows:
+    needs: [prepare-release]
+    permissions:
+      contents: write
     name: Build Windows NSIS
     runs-on: windows-latest
     timeout-minutes: 30
@@ -43,17 +74,36 @@ jobs:
         run: pnpm build
       - name: Build Windows NSIS
         run: pnpm tauri build --bundles nsis
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Avenmedia-Windows-x64
-          path: src-tauri/target/**/release/bundle/nsis/**
-          if-no-files-found: error
-          compression-level: 0
+      - name: Package and upload Windows installer to draft release
+        if: needs.prepare-release.outputs.release_tag != ''
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare-release.outputs.release_tag }}
+        run: |
+          New-Item -ItemType Directory -Path release-packages -Force | Out-Null
+          $files = Get-ChildItem -Path src-tauri/target -Recurse -File | Where-Object { $_.DirectoryName -match '[\\/]bundle[\\/]nsis$' }
+          if (-not $files) { throw "No NSIS installer found" }
+          Compress-Archive -Path $files.FullName -DestinationPath release-packages/Avenmedia-Windows-x64.zip -Force
+          gh release upload $env:RELEASE_TAG release-packages/Avenmedia-Windows-x64.zip --repo $env:GITHUB_REPOSITORY --clobber
 
   build-macos:
-    name: Build macOS DMG
-    runs-on: macos-latest
-    timeout-minutes: 30
+    needs: [prepare-release]
+    permissions:
+      contents: write
+    name: Build macOS DMG (${{ matrix.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Apple-Silicon-arm64
+            runner: macos-latest
+            target: aarch64-apple-darwin
+          - label: Intel-x64
+            runner: macos-15-intel
+            target: x86_64-apple-darwin
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -64,23 +114,34 @@ jobs:
           version: 9
           run_install: false
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Generate valid Tauri icons
-        shell: bash
         run: pnpm tauri icon src-tauri/icons/source.svg
       - name: Build Web App
         run: pnpm build
       - name: Build macOS DMG
-        run: pnpm tauri build --bundles dmg
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Avenmedia-macOS
-          path: src-tauri/target/**/release/bundle/dmg/**
-          if-no-files-found: error
-          compression-level: 0
+        run: pnpm tauri build --target ${{ matrix.target }} --bundles dmg
+      - name: Package and upload macOS DMG to draft release
+        if: needs.prepare-release.outputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare-release.outputs.release_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-packages
+          dmg_dir="src-tauri/target/${{ matrix.target }}/release/bundle/dmg"
+          compgen -G "$dmg_dir/*.dmg" >/dev/null || { echo "No DMG found in $dmg_dir"; exit 1; }
+          zip -q release-packages/Avenmedia-macOS-${{ matrix.label }}.zip "$dmg_dir"/*.dmg
+          gh release upload "$RELEASE_TAG" release-packages/Avenmedia-macOS-${{ matrix.label }}.zip --repo "$GITHUB_REPOSITORY" --clobber
 
   build-linux:
+    needs: [prepare-release]
+    permissions:
+      contents: write
     name: Build Linux DEB and AppImage
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -107,16 +168,24 @@ jobs:
         run: pnpm build
       - name: Build Linux packages
         run: pnpm tauri build --bundles deb,appimage
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Avenmedia-Linux-amd64
-          path: |
-            src-tauri/target/**/release/bundle/deb/**
-            src-tauri/target/**/release/bundle/appimage/**
-          if-no-files-found: error
-          compression-level: 0
+      - name: Package and upload Linux installers to draft release
+        if: needs.prepare-release.outputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare-release.outputs.release_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-packages/linux
+          find src-tauri/target -type f \( -path '*/bundle/deb/*' -o -path '*/bundle/appimage/*' \) -exec cp {} release-packages/linux/ \;
+          test -n "$(find release-packages/linux -type f -print -quit)"
+          (cd release-packages/linux && zip -q -r ../Avenmedia-Linux-amd64.zip .)
+          gh release upload "$RELEASE_TAG" release-packages/Avenmedia-Linux-amd64.zip --repo "$GITHUB_REPOSITORY" --clobber
 
   build-web:
+    needs: [prepare-release]
+    permissions:
+      contents: write
     name: Build web static export
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -131,58 +200,31 @@ jobs:
           run_install: false
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Type-check and test
+        run: pnpm exec tsc --noEmit && pnpm test
       - name: Build web export
         run: pnpm build
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Avenmedia-Web
-          path: out/**
-          if-no-files-found: error
-          compression-level: 6
+      - name: Package and upload static web app to draft release
+        if: needs.prepare-release.outputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare-release.outputs.release_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd out && zip -q -r ../Avenmedia-Web.zip .)
+          gh release upload "$RELEASE_TAG" Avenmedia-Web.zip --repo "$GITHUB_REPOSITORY" --clobber
 
   publish-release:
-    name: Publish release assets
-    needs: [build-windows, build-macos, build-linux, build-web]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    name: Publish successful main-branch release
+    needs: [prepare-release, build-windows, build-macos, build-linux, build-web]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Download Windows artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: Avenmedia-Windows-x64
-          path: release-assets/windows
-      - name: Download macOS artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: Avenmedia-macOS
-          path: release-assets/macos
-      - name: Download Linux artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: Avenmedia-Linux-amd64
-          path: release-assets/linux
-      - name: Download web artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: Avenmedia-Web
-          path: release-assets/web
-      - name: Package release assets with unique names
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p release-packages
-          (cd release-assets/windows && zip -qr ../../release-packages/Avenmedia-Windows-x64.zip .)
-          (cd release-assets/macos && zip -qr ../../release-packages/Avenmedia-macOS.zip .)
-          (cd release-assets/linux && zip -qr ../../release-packages/Avenmedia-Linux-amd64.zip .)
-          (cd release-assets/web && zip -qr ../../release-packages/Avenmedia-Web.zip .)
-          ls -lh release-packages
-      - uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v2.0.0-build-${{ github.run_number }}
-          name: Avenmedia v2.0.0 build ${{ github.run_number }}
-          body: |
-            Automated Avenmedia release with uniquely packaged Windows NSIS, macOS DMG, Linux DEB/AppImage, and web static export.
-          draft: false
-          prerelease: false
-          files: release-packages/*.zip
+      - name: Publish the release after every package has uploaded
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare-release.outputs.release_tag }}
+        run: gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --title "Avenmedia v2.0.0 build $GITHUB_RUN_NUMBER" --notes "Automated Avenmedia release with Windows NSIS, separate Apple Silicon and Intel macOS DMGs, Linux DEB/AppImage, and web static export."

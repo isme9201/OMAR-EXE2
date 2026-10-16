@@ -7,6 +7,8 @@ const cors = {
 };
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
+const allowedRoles = ["employee", "manager", "admin"];
+const allowedSpecialties = ["designer", "marketing", "editor", "accountant", "photographer", "hr", ""];
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -33,17 +35,20 @@ Deno.serve(async (request) => {
   const password = payload?.password;
   const name = payload?.name?.trim();
   const role = payload?.role?.trim() || "employee";
+  const specialty = payload?.specialty?.trim() || "";
   if (!email || !password || !name) return json({ error: "email, password, and name are required" }, 400);
   if (password.length < 12) return json({ error: "password must be at least 12 characters" }, 400);
+  if (!allowedRoles.includes(role)) return json({ error: "role must be employee, manager, or admin" }, 400);
+  if (!allowedSpecialties.includes(specialty)) return json({ error: "specialty is not supported" }, 400);
 
-  const { data: created, error: createError } = await adminClient.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { name, role, specialty: payload?.specialty ?? "" } });
+  const { data: created, error: createError } = await adminClient.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { name, role, specialty } });
   if (createError || !created.user) return json({ error: createError?.message ?? "Unable to create Auth account" }, 400);
 
-  const { error: profileError } = await adminClient.from("profiles").upsert({ id: created.user.id, name, email, role, specialty: payload?.specialty ?? "", is_active: true, updated_at: new Date().toISOString() });
+  const { error: profileError } = await adminClient.from("profiles").upsert({ id: created.user.id, name, email, role, specialty, is_active: true, updated_at: new Date().toISOString() });
   if (profileError) {
     await adminClient.auth.admin.deleteUser(created.user.id);
     return json({ error: `Auth account created but profile failed: ${profileError.message}` }, 500);
   }
 
-  return json({ id: created.user.id, name, email, role, specialty: payload?.specialty ?? "" }, 201);
+  return json({ id: created.user.id, name, email, role, specialty }, 201);
 });

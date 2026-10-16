@@ -3,12 +3,31 @@ import { supabaseConfig } from '@/lib/supabase-config';
 
 export const SPECIALTIES = [
   { value: 'designer', label: 'مصمم' },
-  { value: 'marketing', label: 'تسويق' },
+  { value: 'marketing', label: 'مسوق' },
   { value: 'editor', label: 'مونتاج' },
   { value: 'accountant', label: 'محاسب' },
   { value: 'photographer', label: 'مصور' },
   { value: 'hr', label: 'موارد بشرية' },
 ] as const;
+
+export const REQUEST_TYPES = [
+  { value: 'photography', label: 'تصوير', specialties: ['photographer'] },
+  { value: 'video', label: 'تصوير فيديو', specialties: ['photographer', 'editor'] },
+  { value: 'design', label: 'تصميم', specialties: ['designer'] },
+  { value: 'editing', label: 'مونتاج', specialties: ['editor'] },
+  { value: 'marketing', label: 'مسوق', specialties: ['marketing'] },
+  { value: 'human_resources', label: 'موارد بشرية', specialties: ['hr'] },
+  { value: 'accounting', label: 'محاسبة', specialties: ['accountant'] },
+] as const;
+
+export function specialtyLabel(value?: string | null) {
+  return SPECIALTIES.find((item) => item.value === value)?.label || value || 'بدون تخصص';
+}
+
+export function matchesRequestSpecialty(specialty: string | null | undefined, requestType: string) {
+  const type = REQUEST_TYPES.find((item) => item.value === requestType);
+  return !type || type.specialties.some((item) => item === specialty);
+}
 
 function logAuthError(operation: string, error: unknown) {
   if (typeof console !== 'undefined') console.error(`[Avenmedia][auth][${operation}]`, error);

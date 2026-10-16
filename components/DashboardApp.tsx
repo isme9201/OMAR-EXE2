@@ -110,7 +110,9 @@ export function DashboardApp({ page }: { page: WorkspacePage }) {
     const result = await invokeAvenmediaFunction<{ link?: { token: string; expires_at?: string; id?: string } }>("cloudinary-upload", { action: "create_link", ttlHours: 72 });
     const token = result.data?.link?.token;
     if (result.error || !token) { setNotice(result.error || "تعذر إنشاء رابط الرفع"); return; }
-    const link = `https://avenmedia.pages.dev/upload?token=${encodeURIComponent(token)}`;
+    const linkUrl = new URL("/client-upload.html", window.location.origin);
+    linkUrl.searchParams.set("token", token);
+    const link = linkUrl.toString();
     await navigator.clipboard?.writeText(link);
     void recordStudioAction("uploads.magic_link.create", "إنشاء رابط رفع آمن", { expiresInHours: 72, linkId: result.data?.link?.id });
     setNotice(`تم إنشاء الرابط ونسخه. صالح لمدة 72 ساعة: ${link}`);

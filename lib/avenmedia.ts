@@ -1,7 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { supabaseConfig } from '@/lib/supabase-config';
 
-export type Employee = { id: string; name: string; email: string; role: string; specialty?: string | null };
+export type Employee = { id: string; name: string; email: string; role: string; specialty?: string | null; is_active?: boolean };
 export type UploadStatus = 'new' | 'viewed' | 'in_progress' | 'delivered' | 'needs_reupload';
 export type UploadRecord = { id: string; file_name?: string | null; client_name?: string | null; file_url?: string | null; public_url?: string | null; secure_url?: string | null; created_at?: string | null; uploaded_at?: string | null; task_id?: string | null; bytes?: number | null; format?: string | null; resource_type?: string | null; status?: UploadStatus | null; note?: string | null; viewed_at?: string | null; viewed_by?: string | null };
 export type AvenmediaTask = { id: string; title: string; task_type: string; client_name?: string | null; client_phone?: string | null; description?: string | null; status: string; priority: string; due_at?: string | null; created_at?: string; assignments?: Employee[] };
@@ -35,8 +35,8 @@ export async function listAvenmediaTasks(): Promise<Result<AvenmediaTask[]>> {
 
 export async function listEmployees(): Promise<Result<Employee[]>> {
   const db = client(); if (!db) return empty([], 'Supabase is not configured');
-  const { data, error } = await db.from('profiles').select('id,name,email,role,specialty').order('name');
-  return empty((data ?? []) as Employee[], error?.message ?? '');
+  const { data, error } = await db.from('profiles').select('id,name,email,role,specialty,is_active').order('name');
+  return empty(((data ?? []) as Employee[]).filter((person) => person.is_active !== false), error?.message ?? '');
 }
 
 export async function listUploadRecords(): Promise<Result<UploadRecord[]>> {

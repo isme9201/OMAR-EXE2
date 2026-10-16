@@ -1,6 +1,7 @@
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { PDFDocument, rgb } from 'pdf-lib';
 import { getAuthClient } from '@/lib/avenmedia-auth';
 
+import { embedAvenmediaFonts, enableArabicPdfText } from '@/lib/pdf-arabic';
 export type RequestRow = {
   id: string; title: string; client_name: string | null; client_phone: string | null;
   description: string | null; requirements: string | null; estimated_cost: number | null;
@@ -35,7 +36,7 @@ export async function saveRequest(input: Record<string, unknown>, id?: string) {
 export async function removeRequest(id: string) { const result = await db().from('tasks').delete().eq('id', id); if (result.error) console.error('[Avenmedia][requests.delete]', result.error); return { error: errorText(result.error) }; }
 
 export async function makeEmployeeSchedulePdf(employeeName: string, requests: RequestRow[]) {
-  const pdf = await PDFDocument.create(); const font = await pdf.embedFont(StandardFonts.Helvetica); const bold = await pdf.embedFont(StandardFonts.HelveticaBold); let page = pdf.addPage([595, 842]); let y = 735;
+  const pdf = await PDFDocument.create(); enableArabicPdfText(pdf); const { font, bold } = await embedAvenmediaFonts(pdf); let page = pdf.addPage([595, 842]); let y = 735;
   const header = () => { page.drawRectangle({ x: 0, y: 760, width: 595, height: 82, color: rgb(.06, .10, .30) }); page.drawText('AVENMEDIA', { x: 45, y: 803, size: 25, font: bold, color: rgb(1, 1, 1) }); page.drawText('PRODUCTION WORK SCHEDULE', { x: 45, y: 783, size: 10, font, color: rgb(.72, .78, 1) }); page.drawText(employeeName.slice(0, 40), { x: 410, y: 803, size: 12, font: bold, color: rgb(1, 1, 1) }); };
   const newPage = () => { page = pdf.addPage([595, 842]); y = 735; header(); };
   header(); page.drawText(`Printed: ${new Date().toLocaleDateString()}`, { x: 45, y: y, size: 10, font, color: rgb(.36, .40, .52) }); y -= 35;

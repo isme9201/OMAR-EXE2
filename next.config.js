@@ -4,14 +4,7 @@ const nextConfig = {
   images: {
     unoptimized: true
   },
-  trailingSlash: true,
-  // هذا الإعداد سيتجاهل أي أخطاء في ملفات eslint أو typescript ويكمل البيلد غصباً عنه
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  typescript: {
-    ignoreBuildErrors: true,
-  }
+  trailingSlash: true
 };
 
 module.exports = nextConfig;

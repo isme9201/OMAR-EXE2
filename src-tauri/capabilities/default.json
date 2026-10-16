@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Main workspace window with safe access to open local output folders.",
+  "windows": ["main"],
+  "permissions": ["core:default", "opener:allow-open-path"]
+}

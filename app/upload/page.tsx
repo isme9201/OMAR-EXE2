@@ -8,5 +8,5 @@ export default function ClientUploadRedirect() {
     window.location.replace(`/aven-upload.html${query}`);
   }, []);
 
-  return <main dir="rtl" className="grid min-h-screen place-items-center bg-[#10194a] p-6 text-white"><p className="rounded-2xl bg-white/10 px-6 py-4 text-sm font-bold">جارٍ فتح غرفة الرفع الآمنة…</p></main>;
+  return <main dir="rtl" className="grid min-h-screen place-items-center bg-[#080d24] p-6 text-white"><p className="rounded-2xl bg-white/10 px-6 py-4 text-sm font-bold">جارٍ فتح غرفة الرفع الآمنة…</p></main>;
 }

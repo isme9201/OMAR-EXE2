@@ -103,7 +103,7 @@ export function DashboardApp({ page }: { page: WorkspacePage }) {
 
   const meta = pageMeta[page] ?? pageMeta.overview;
   const safePage = pageMeta[page] ? page : "overview";
-  const appTheme = dark ? "bg-[#192320] text-[#f7f9ff]" : "bg-[#f7f9ff] text-[#080d24]";
+  const appTheme = dark ? "bg-[#080d24] text-[#f7f9ff]" : "bg-[#f7f9ff] text-[#080d24]";
 
   function advanceTask(id: number) {
     const currentTask = tasks.find((task) => task.id === id);

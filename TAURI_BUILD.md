@@ -56,6 +56,8 @@ Artifacts are written under `src-tauri/target/release/bundle/`. A production rel
 
 The editor reads and writes portfolio pages, movable elements, responsive frame variants, revision snapshots, team roles, and portfolio media through the selected Supabase project. The public Supabase URL and anon/publishable key are injected at build time; no service-role key belongs in the desktop bundle. Authenticated users must be granted the policies documented in the Supabase migration files.
 
+Arabic step-by-step instructions for building Apple Silicon, Intel, and Universal macOS DMGs locally are in [BUILD_MAC_AR.md](BUILD_MAC_AR.md).
+
 Reference: [Tauri Windows Installer documentation](https://v2.tauri.app/distribute/windows-installer/).
 
 ## Direct executable limitation

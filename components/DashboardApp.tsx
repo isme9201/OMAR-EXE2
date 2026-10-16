@@ -17,6 +17,7 @@ import { invokeAvenmediaFunction } from "@/lib/avenmedia";
 import { AvenmediaOperations } from "@/components/AvenmediaOperations";
 import { AvenmediaReports } from "@/components/AvenmediaReports";
 import { RequestManagement } from "@/components/RequestManagement";
+import { RequestCreateModal } from "@/components/RequestCreateModal";
 import { EmployeeTasks } from "@/components/EmployeeTasks";
 import { RequestSearchCard } from "@/components/RequestSearchCard";
 import { NotificationBell } from "@/components/NotificationBell";
@@ -220,7 +221,8 @@ export function DashboardApp({ page }: { page: WorkspacePage }) {
           {safePage === "settings" && <SettingsPage dark={dark} setDark={updateTheme} />}
         </section>
       </div>
-      {modal && <ActionModal kind={modal} close={() => setModal(null)} onCreate={modal === "magic" ? createMagicLink : (payload) => createRecord(modal, payload)} />}
+      {modal === "booking" && <RequestCreateModal onClose={() => setModal(null)} onSaved={() => setNotice("تم حفظ الطلب الكامل في Supabase بنجاح.")} />}
+      {modal && modal !== "booking" && <ActionModal kind={modal} close={() => setModal(null)} onCreate={modal === "magic" ? createMagicLink : (payload) => createRecord(modal, payload)} />}
       {linkDialog && <UploadLinkDialog link={linkDialog} history={linkHistory} loading={linksLoading} onClose={() => setLinkDialog(null)} onRefresh={() => void loadLinkHistory()} />}
       {showScrollTop && <button type="button" aria-label="العودة إلى أعلى الصفحة" title="العودة إلى أعلى الصفحة" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} className="fixed bottom-6 left-6 z-40 grid h-11 w-11 place-items-center rounded-full bg-[#142c9b] text-white shadow-xl transition hover:-translate-y-1"><ChevronUp className="h-5" /></button>}
     </main>

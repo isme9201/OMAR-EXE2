@@ -47,7 +47,7 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Generate valid Tauri icons
         shell: bash
-        run: pnpm tauri icon src-tauri/icons/source.svg
+        run: pnpm tauri icon public/branding/aven-logo-512.png
       - name: Build Web App
         run: pnpm build
       - name: Build Windows NSIS
@@ -78,7 +78,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Generate valid Tauri icons
-        run: pnpm tauri icon src-tauri/icons/source.svg
+        run: pnpm tauri icon public/branding/aven-logo-512.png
       - name: Build Web App
         run: pnpm build
       - name: Build macOS DMG (ad-hoc until Apple certificate is configured)
@@ -115,7 +115,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Generate valid Tauri icons
-        run: pnpm tauri icon src-tauri/icons/source.svg
+        run: pnpm tauri icon public/branding/aven-logo-512.png
       - name: Build Web App
         run: pnpm build
       - name: Build Linux packages

@@ -324,9 +324,13 @@
           break;
         }
         if (document.visibilityState === 'hidden') {
-          job.status = 'queued'; await putJob(job); await scheduleInBackground(job.id);
-          show(`حُفظ ${job.fileName} في قائمة الرفع الخلفية. يمكنك مغادرة الصفحة؛ قد تختلف استمرارية الخلفية حسب المتصفح.`, 'info');
-          break;
+          job.status = 'queued'; await putJob(job);
+          if (await scheduleInBackground(job.id)) {
+            show(`حُفظ ${job.fileName} في قائمة الرفع الخلفية. يمكنك مغادرة الصفحة؛ قد تختلف استمرارية الخلفية حسب المتصفح.`, 'info');
+            break;
+          }
+          // Without Background Sync, keep sending chunks from the active page/service worker.
+          // Browsers may still suspend a hidden tab; the persisted job resumes when reopened.
         }
         const before = Number(job.nextOffset || 0);
         job.status = job.asset ? 'registering' : 'uploading';

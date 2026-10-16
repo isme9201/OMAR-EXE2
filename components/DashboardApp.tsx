@@ -9,7 +9,7 @@ import {
   ClipboardList, Clock3, Command, Download, FileImage, FilePlus2, FolderOpen, Gauge, Grid2X2,
   ImagePlus, Inbox, Landmark, Link2, ListFilter, LockKeyhole, MessageCircleMore, MoreHorizontal,
   PackageCheck, Plus, ReceiptText, Search, Send, Settings2, ShieldCheck, SlidersHorizontal, Sparkles,
-  SunMoon, UploadCloud, UsersRound, Video, WalletCards, Wrench, X, Zap, ChevronUp
+  SunMoon, UploadCloud, UsersRound, Video, WalletCards, Wrench, X, Zap, ChevronUp, Share2
 } from "lucide-react";
 import type { WorkspacePage } from "@/lib/workspaces";
 import { createWorkspaceRecord, getStudioThemePreference, loadWorkspaceRecords, recordStudioAction, saveStudioThemePreference, updateWorkspaceRecord, type WorkspaceRecord } from "@/lib/supabase-browser";
@@ -27,6 +27,7 @@ import { UploadRoom } from "@/components/UploadRoom";
 
 type Task = { id: number; recordId?: string; client: string; title: string; stage: string; due: string; owner: string; progress: number; tone: string };
 type ModalKind = "booking" | "magic" | "invoice" | "upload" | null;
+type UploadLink = { id: string; token: string; task_id?: string | null; client_name?: string | null; expires_at: string; revoked_at?: string | null; created_at: string };
 
 const navItems: { page: WorkspacePage; label: string; icon: LucideIcon; tag?: string }[] = [
   { page: "overview", label: "نظرة الاستوديو", icon: Grid2X2 },
@@ -79,6 +80,9 @@ export function DashboardApp({ page }: { page: WorkspacePage }) {
   const [clientQuery, setClientQuery] = useState("");
   const [dataLoading, setDataLoading] = useState(true);
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [linkDialog, setLinkDialog] = useState<{ url: string; expiresAt: string } | null>(null);
+  const [linkHistory, setLinkHistory] = useState<UploadLink[]>([]);
+  const [linksLoading, setLinksLoading] = useState(false);
 
   useEffect(() => { let cancelled = false; void getStudioThemePreference().then((theme) => { if (!cancelled && theme) { setDark(theme === "dark"); window.localStorage.setItem("photomedia-theme", theme); } }); return () => { cancelled = true; }; }, []);
   useEffect(() => { let cancelled = false; void loadWorkspaceRecords().then(({ data, error }) => { if (cancelled) return; setRecords(data); setTasks(data.filter((record) => record.record_type === "task").map((record, index) => ({ recordId: record.id, id: index + 1, client: String((record.payload ?? {}).client ?? "بدون عميل"), title: String((record.payload ?? {}).title ?? "مهمة جديدة"), stage: String((record.payload ?? {}).stage ?? "جديدة"), due: String((record.payload ?? {}).due ?? "غير محدد"), owner: String((record.payload ?? {}).owner ?? "غير مسند"), progress: Number((record.payload ?? {}).progress ?? 0), tone: String((record.payload ?? {}).tone ?? "bg-[#e6ebff] text-[#142c9b]") }))); setMessages(data.filter((record) => record.record_type === "message").map((record) => String((record.payload ?? {}).message ?? "" )).filter(Boolean)); setDataLoading(false); if (error === "unauthenticated") setNotice("سجل دخولك لعرض بيانات الاستوديو من قاعدة البيانات"); else if (error && error !== "supabase-unavailable") setNotice(`تعذر تحميل بيانات قاعدة البيانات: ${error}`); else if (!data.length) setNotice("لا توجد سجلات بعد — ابدأ بإضافة أول حجز أو مهمة"); }); return () => { cancelled = true; }; }, []);
@@ -119,23 +123,30 @@ export function DashboardApp({ page }: { page: WorkspacePage }) {
     setMessage("");
     setNotice("أُرسلت الرسالة إلى قناة الإنتاج.");
   }
+  async function loadLinkHistory() {
+    setLinksLoading(true);
+    const result = await invokeAvenmediaFunction<{ links: UploadLink[] }>("cloudinary-upload", { action: "list_links" });
+    if (result.data?.links) setLinkHistory(result.data.links);
+    if (result.error) setNotice(`تعذر تحميل سجل الروابط: ${result.error}`);
+    setLinksLoading(false);
+  }
   async function createMagicLink() {
     setNotice("جارٍ إنشاء رابط رفع حقيقي من Supabase…");
-    const result = await invokeAvenmediaFunction<{ link?: { token: string; expires_at?: string; id?: string } }>("cloudinary-upload", { action: "create_link", ttlHours: 72 });
+    const result = await invokeAvenmediaFunction<{ link?: { token: string; expires_at?: string; id?: string } }>("cloudinary-upload", { action: "create_link", ttlHours: 24 });
     const token = result.data?.link?.token;
     if (result.error || !token) { setNotice(result.error || "تعذر إنشاء رابط الرفع"); return; }
     const link = `https://avenmedia.pages.dev/upload?token=${encodeURIComponent(token)}`;
-    await navigator.clipboard?.writeText(link);
-    void recordStudioAction("uploads.magic_link.create", "إنشاء رابط رفع آمن", { expiresInHours: 72, linkId: result.data?.link?.id });
-    setNotice(`تم إنشاء الرابط ونسخه. صالح لمدة 72 ساعة: ${link}`);
+    void recordStudioAction("uploads.magic_link.create", "إنشاء رابط رفع آمن", { expiresInHours: 24, linkId: result.data?.link?.id });
+    setLinkDialog({ url: link, expiresAt: result.data?.link?.expires_at ?? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() });
+    await loadLinkHistory();
     setModal(null);
   }
-  function createRecord(kind: ModalKind) {
+  function createRecord(kind: ModalKind, payload: Record<string, unknown> = {}) {
     if (!kind) return;
     const recordType = kind === "booking" ? "schedule" : kind === "invoice" ? "invoice" : "upload";
     const actionKey = kind === "booking" ? "calendar.booking.create" : kind === "invoice" ? "finance.invoice.create" : "uploads.file.create";
     const label = kind === "booking" ? "إنشاء حجز" : kind === "invoice" ? "إنشاء فاتورة" : "إضافة ملف للرفع";
-    void createWorkspaceRecord(recordType, { status: "draft", source: "studio-dashboard", createdAt: new Date().toISOString() }).then(({ data, error }) => { if (data) setRecords((current) => [data, ...current]); if (error) setNotice(`تعذر الحفظ في قاعدة البيانات: ${error}`); });
+    void createWorkspaceRecord(recordType, { ...payload, status: "draft", source: "studio-dashboard", createdAt: new Date().toISOString() }).then(({ data, error }) => { if (data) setRecords((current) => [data, ...current]); if (error) setNotice(`تعذر الحفظ في قاعدة البيانات: ${error}`); });
     void recordStudioAction(actionKey, label);
     setNotice(`${label} — تم الحفظ كمسودة في قاعدة البيانات.`);
     setModal(null);
@@ -197,7 +208,7 @@ export function DashboardApp({ page }: { page: WorkspacePage }) {
 
           <div className={`mb-6 flex items-center gap-3 rounded-xl border px-4 py-3 text-xs ${dark ? "border-[#3c5d53] bg-[#142c9b]/30 text-[#dcf1e4]" : "border-[#c9ded2] bg-[#e6ebff] text-[#142c9b]"}`}><Zap className="h-4 w-4 fill-current" /><span>{notice}</span></div>
 
-          {safePage === "overview" && <SimpleOverview />}
+          {safePage === "overview" && <SimpleOverview setModal={setModal} />}
           {(safePage === "calendar" || safePage === "clients") && <RequestManagement />}
           {safePage === "production" && <EmployeeTasks />}
           {safePage === "finance" && <FinanceLedger />}
@@ -209,7 +220,8 @@ export function DashboardApp({ page }: { page: WorkspacePage }) {
           {safePage === "settings" && <SettingsPage dark={dark} setDark={updateTheme} />}
         </section>
       </div>
-      {modal && <ActionModal kind={modal} close={() => setModal(null)} onCreate={modal === "magic" ? createMagicLink : () => createRecord(modal)} />}
+      {modal && <ActionModal kind={modal} close={() => setModal(null)} onCreate={modal === "magic" ? createMagicLink : (payload) => createRecord(modal, payload)} />}
+      {linkDialog && <UploadLinkDialog link={linkDialog} history={linkHistory} loading={linksLoading} onClose={() => setLinkDialog(null)} onRefresh={() => void loadLinkHistory()} />}
       {showScrollTop && <button type="button" aria-label="العودة إلى أعلى الصفحة" title="العودة إلى أعلى الصفحة" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} className="fixed bottom-6 left-6 z-40 grid h-11 w-11 place-items-center rounded-full bg-[#142c9b] text-white shadow-xl transition hover:-translate-y-1"><ChevronUp className="h-5" /></button>}
     </main>
   );
@@ -258,14 +270,14 @@ function Timeline({ time, title, meta, color }: { time: string; title: string; m
   return <div className="relative grid grid-cols-[62px_1fr] gap-3 py-3.5"><span className="font-mono text-xs text-[#67756e]">{time}</span><div><span className="absolute -right-[25px] top-5 h-2.5 w-2.5 rounded-full border-2 border-[#ffffff]" style={{ background: color }} /><strong className="block text-sm">{title}</strong><span className="mt-1 block text-xs text-[#6d7b74]">{meta}</span></div></div>;
 }
 
-function SimpleOverview() {
+function SimpleOverview({ setModal }: { setModal: (kind: ModalKind) => void }) {
   const actions = [
     ["/calendar", "إدارة الطلبات", "إضافة طلب، البحث، التعديل والحذف", ClipboardList],
     ["/operations", "إدارة الفريق", "الموظفون والتخصصات والمهام", UsersRound],
     ["/production", "إدارة المهام", "متابعة مراحل التنفيذ والمنجزات", Video],
     ["/reports", "التقارير", "كشف الحساب وطباعة PDF", ReceiptText],
   ] as const;
-  return <div dir="rtl" className="space-y-6"><section className="rounded-[28px] bg-[#111b4e] p-8 text-white shadow-xl"><span className="font-mono text-xs tracking-[.2em] text-[#b9c3ff]">AVENMEDIA / CONTROL DESK</span><h2 className="mt-3 text-4xl font-black">مكتب الإدارة</h2><p className="mt-3 max-w-2xl text-sm leading-7 text-indigo-100">واجهة مختصرة للوصول السريع إلى طلبات الزبائن، المهام، المنفذين، والتقارير.</p><div className="mt-6 flex flex-wrap gap-3"><Link href="/calendar" className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-black text-[#111b4e]"><Plus className="h-4" />إضافة طلب</Link><Link href="/upload" className="inline-flex items-center gap-2 rounded-xl border border-white/30 px-4 py-3 text-sm font-bold"><Link2 className="h-4" />رابط رفع للزبون</Link></div></section><RequestSearchCard /><section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{actions.map(([href, title, description, Icon]) => <Link key={href} href={href} className="group rounded-2xl border border-[#dce1ff] bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:border-[#7388ff]"><span className="grid h-11 w-11 place-items-center rounded-xl bg-[#eef1ff] text-[#5366e8]"><Icon className="h-5" /></span><h3 className="mt-4 text-lg font-black text-[#111b4e]">{title}</h3><p className="mt-2 text-xs leading-6 text-slate-500">{description}</p><span className="mt-4 block text-xs font-bold text-[#5366e8]">عرض الكل ←</span></Link>)}</section></div>;
+  return <div dir="rtl" className="space-y-6"><section className="rounded-[28px] bg-[#111b4e] p-8 text-white shadow-xl"><span className="font-mono text-xs tracking-[.2em] text-[#b9c3ff]">AVENMEDIA / CONTROL DESK</span><h2 className="mt-3 text-4xl font-black">مكتب الإدارة</h2><p className="mt-3 max-w-2xl text-sm leading-7 text-indigo-100">واجهة مختصرة للوصول السريع إلى طلبات الزبائن، المهام، المنفذين، والتقارير.</p><div className="mt-6 flex flex-wrap gap-3"><button onClick={() => setModal("booking")} className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-black text-[#111b4e]"><Plus className="h-4" />إضافة طلب</button><Link href="/upload" className="inline-flex items-center gap-2 rounded-xl border border-white/30 px-4 py-3 text-sm font-bold"><Link2 className="h-4" />رابط رفع للزبون</Link></div></section><RequestSearchCard /><section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{actions.map(([href, title, description, Icon]) => <Link key={href} href={href} className="group rounded-2xl border border-[#dce1ff] bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:border-[#7388ff]"><span className="grid h-11 w-11 place-items-center rounded-xl bg-[#eef1ff] text-[#5366e8]"><Icon className="h-5" /></span><h3 className="mt-4 text-lg font-black text-[#111b4e]">{title}</h3><p className="mt-2 text-xs leading-6 text-slate-500">{description}</p><span className="mt-4 block text-xs font-bold text-[#5366e8]">عرض الكل ←</span></Link>)}</section></div>;
 }
 function TaskCard({ task, advanceTask }: { task: Task; advanceTask: (id: number) => void }) {
   return <article className="rounded-2xl border border-[#e1d8cb] bg-[#ffffff] p-4 transition hover:border-[#b8cfc2]"><div className="mb-3 flex items-start justify-between gap-2"><span className={`rounded-lg px-2 py-1 text-[10px] font-extrabold ${task.tone}`}>{task.stage}</span><button aria-label="خيارات المهمة" onClick={() => advanceTask(task.id)} className="text-[#64736b]"><MoreHorizontal className="h-4" /></button></div><h4 className="m-0 text-sm font-extrabold">{task.client}</h4><p className="mt-1 text-xs text-[#58617e]">{task.title}</p><div className="mt-4 flex items-center justify-between text-[11px]"><span className="font-mono text-[#233f9f]">{task.due}</span><span className="font-bold text-[#506159]">{task.owner}</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#cbd4f5]"><div className="h-full rounded-full bg-[#142c9b]" style={{ width: `${task.progress}%` }} /></div><button onClick={() => advanceTask(task.id)} className="mt-4 w-full rounded-lg border border-[#cfe0d6] bg-[#edf6f0] py-2 text-xs font-extrabold text-[#142c9b] transition hover:bg-[#dcefe4] active:scale-[.98]">نقل للمرحلة التالية</button></article>;
@@ -319,8 +331,17 @@ function SettingsPage({ dark, setDark }: { dark: boolean; setDark: (value: boole
 function MiniStat({ value, label }: { value: string; label: string }) { return <div className="rounded-xl bg-[#f7f9ff] p-3"><strong className="font-mono text-2xl text-[#142c9b]">{value}</strong><span className="mt-1 block text-[10px] text-[#697870]">{label}</span></div>; }
 function SecurityTile({ icon: Icon, label, detail }: { icon: LucideIcon; label: string; detail: string }) { return <div className="rounded-xl border border-[#e3dbd0] bg-[#ffffff] p-4"><Icon className="h-5 text-[#142c9b]" /><strong className="mt-3 block text-sm">{label}</strong><span className="mt-1 block text-xs text-[#58617e]">{detail}</span></div>; }
 
-function ActionModal({ kind, close, onCreate }: { kind: Exclude<ModalKind, null>; close: () => void; onCreate: () => void }) {
-  const content: Record<Exclude<ModalKind, null>, { title: string; text: string; action: string; icon: LucideIcon }> = { booking: { title: "تسجيل حجز جديد", text: "أضف المشروع أولاً، ثم عيّن الفريق والموقع من الروزنامة.", action: "حفظ المسودة", icon: CalendarDays }, magic: { title: "رابط رفع آمن", text: "سيتم إنشاء رابط خاص بالعميل، صالح لمدة 72 ساعة، ومربوط بسجل قاعدة البيانات.", action: "إنشاء ونسخ الرابط", icon: Link2 }, invoice: { title: "إنشاء فاتورة", text: "ابدأ بمسودة قابلة للمراجعة قبل إرسالها للعميل.", action: "إنشاء فاتورة", icon: ReceiptText }, upload: { title: "رفع داخلي", text: "أضف ملفاً إلى قائمة الرفع ليبدأ التحضير والتحقق من السلامة.", action: "إضافة للرفع", icon: ImagePlus } };
+function ActionModal({ kind, close, onCreate }: { kind: Exclude<ModalKind, null>; close: () => void; onCreate: (payload?: Record<string, unknown>) => void }) {
+  const content: Record<Exclude<ModalKind, null>, { title: string; text: string; action: string; icon: LucideIcon }> = { booking: { title: "تسجيل حجز جديد", text: "أضف اسم العميل والمشروع، وسيتم حفظ الطلب فوراً في Supabase.", action: "حفظ الطلب", icon: CalendarDays }, magic: { title: "رابط رفع آمن", text: "سيتم إنشاء رابط خاص بالعميل، صالح لمدة 24 ساعة، ومربوط بسجل قاعدة البيانات.", action: "إنشاء الرابط", icon: Link2 }, invoice: { title: "إنشاء فاتورة", text: "ابدأ بمسودة قابلة للمراجعة قبل إرسالها للعميل.", action: "إنشاء فاتورة", icon: ReceiptText }, upload: { title: "رفع داخلي", text: "أضف ملفاً إلى قائمة الرفع ليبدأ التحضير والتحقق من السلامة.", action: "إضافة للرفع", icon: ImagePlus } };
   const current = content[kind]; const Icon = current.icon;
-  return <div className="fixed inset-0 z-50 grid place-items-center bg-[#080d24]/55 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={current.title}><div className="w-full max-w-md rounded-[24px] bg-[#ffffff] p-6 text-[#080d24] shadow-2xl"><div className="flex items-start justify-between"><span className="grid h-11 w-11 place-items-center rounded-xl bg-[#e6ebff] text-[#142c9b]"><Icon className="h-5" /></span><button onClick={close} aria-label="إغلاق" className="text-[#58617e]"><X className="h-5" /></button></div><RuleLabel>إجراء سريع</RuleLabel><h2 className="font-naskh mt-1 text-2xl font-bold">{current.title}</h2><p className="mt-2 text-sm leading-7 text-[#64736b]">{current.text}</p>{kind !== "magic" && <input placeholder={kind === "booking" ? "اسم المشروع أو العميل" : kind === "invoice" ? "اسم العميل" : "اختر ملفاً"} className="mt-5 w-full rounded-xl border border-[#cbd4f5] bg-white px-3 py-3 text-sm outline-none focus:border-[#142c9b]" />}{kind === "magic" && <div className="font-mono mt-5 rounded-xl border border-dashed border-[#c2d9cc] bg-[#f0f7f2] p-3 text-xs text-[#142c9b]">سيتم إنشاء رابط حقيقي من Supabase ونسخه بعد نجاح العملية.</div>}<div className="mt-6 flex gap-2"><button onClick={onCreate} className="flex-1 rounded-xl bg-[#142c9b] py-3 text-sm font-extrabold text-white active:scale-[.98]">{current.action}</button><button onClick={close} className="rounded-xl border border-[#cbd4f5] px-4 py-3 text-sm font-bold text-[#5e6d66]">إلغاء</button></div></div></div>;
+  const [client, setClient] = useState(""); const [project, setProject] = useState("");
+  return <div className="fixed inset-0 z-50 grid place-items-center bg-[#080d24]/55 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={current.title}><div className="w-full max-w-md rounded-[24px] bg-[#ffffff] p-6 text-[#080d24] shadow-2xl"><div className="flex items-start justify-between"><span className="grid h-11 w-11 place-items-center rounded-xl bg-[#e6ebff] text-[#142c9b]"><Icon className="h-5" /></span><button onClick={close} aria-label="إغلاق" className="text-[#58617e]"><X className="h-5" /></button></div><RuleLabel>إجراء سريع</RuleLabel><h2 className="font-naskh mt-1 text-2xl font-bold">{current.title}</h2><p className="mt-2 text-sm leading-7 text-[#64736b]">{current.text}</p>{kind === "booking" && <div className="mt-5 space-y-3"><input value={client} onChange={(event) => setClient(event.target.value)} placeholder="اسم العميل" autoFocus className="w-full rounded-xl border border-[#cbd4f5] bg-white px-3 py-3 text-sm outline-none focus:border-[#142c9b]" /><input value={project} onChange={(event) => setProject(event.target.value)} placeholder="اسم المشروع أو تفاصيل الطلب" className="w-full rounded-xl border border-[#cbd4f5] bg-white px-3 py-3 text-sm outline-none focus:border-[#142c9b]" /></div>}{kind !== "booking" && kind !== "magic" && <input placeholder={kind === "invoice" ? "اسم العميل" : "اختر ملفاً"} className="mt-5 w-full rounded-xl border border-[#cbd4f5] bg-white px-3 py-3 text-sm outline-none focus:border-[#142c9b]" />}{kind === "magic" && <div className="font-mono mt-5 rounded-xl border border-dashed border-[#c2d9cc] bg-[#f0f7f2] p-3 text-xs text-[#142c9b]">سيتم إنشاء رابط حقيقي من Supabase ونسخه بعد نجاح العملية.</div>}<div className="mt-6 flex gap-2"><button disabled={kind === "booking" && (!client.trim() || !project.trim())} onClick={() => onCreate(kind === "booking" ? { clientName: client.trim(), title: project.trim() } : undefined)} className="flex-1 rounded-xl bg-[#142c9b] py-3 text-sm font-extrabold text-white active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-40">{current.action}</button><button onClick={close} className="rounded-xl border border-[#cbd4f5] px-4 py-3 text-sm font-bold text-[#5e6d66]">إلغاء</button></div></div></div>;
+}
+
+function UploadLinkDialog({ link, history, loading, onClose, onRefresh }: { link: { url: string; expiresAt: string }; history: UploadLink[]; loading: boolean; onClose: () => void; onRefresh: () => void }) {
+  const copy = async (url: string) => { await navigator.clipboard?.writeText(url); };
+  const share = async (url: string) => { if (navigator.share) await navigator.share({ title: "رابط رفع Avenmedia", text: "رابط رفع الملفات", url }); else await copy(url); };
+  const urlFor = (token: string) => `https://avenmedia.pages.dev/upload?token=${encodeURIComponent(token)}`;
+  const expired = (item: UploadLink) => Boolean(item.revoked_at) || new Date(item.expires_at).getTime() <= Date.now();
+  return <div className="fixed inset-0 z-[60] grid place-items-center bg-[#080d24]/55 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="سجل روابط الرفع"><div className="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-[24px] bg-white p-6 text-[#080d24] shadow-2xl" dir="rtl"><div className="flex items-start justify-between gap-3"><div><RuleLabel>UPLOAD LINKS / 24 HOURS</RuleLabel><h2 className="font-naskh mt-1 text-2xl font-bold">رابط الرفع الحقيقي</h2></div><button onClick={onClose} aria-label="إغلاق" className="rounded-full p-2 text-[#58617e] hover:bg-[#eef2ff]"><X className="h-5" /></button></div><div className="mt-5 rounded-2xl border border-[#bfd4c7] bg-[#f0f7f2] p-4"><p className="m-0 break-all font-mono text-xs leading-6 text-[#142c9b]">{link.url}</p><p className="mt-2 text-xs font-bold text-[#58617e]">ينتهي: {new Date(link.expiresAt).toLocaleString("ar-IQ")}</p><div className="mt-3 flex flex-wrap gap-2"><button onClick={() => void copy(link.url)} className="inline-flex items-center gap-2 rounded-xl bg-[#142c9b] px-4 py-2.5 text-xs font-extrabold text-white"><ClipboardList className="h-4" />نسخ الرابط</button><button onClick={() => void share(link.url)} className="inline-flex items-center gap-2 rounded-xl border border-[#cbd4f5] px-4 py-2.5 text-xs font-extrabold text-[#142c9b]"><Share2 className="h-4" />مشاركة</button></div></div><div className="mt-6 flex items-center justify-between"><div><RuleLabel>LINK HISTORY</RuleLabel><h3 className="mt-1 text-lg font-extrabold">سجل الروابط السابقة</h3></div><button onClick={onRefresh} className="rounded-xl border border-[#cbd4f5] px-3 py-2 text-xs font-bold text-[#142c9b]">{loading ? "جارٍ التحميل…" : "تحديث السجل"}</button></div><div className="mt-3 space-y-2">{history.length ? history.map((item) => { const isExpired = expired(item); const itemUrl = urlFor(item.token); return <article key={item.id} className="rounded-xl border border-[#e2e7f8] bg-[#f7f9ff] p-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><b className="text-xs">{item.client_name || "بدون اسم عميل"}</b><p className="mt-1 text-[10px] text-[#58617e]">أنشئ {new Date(item.created_at).toLocaleString("ar-IQ")} · ينتهي {new Date(item.expires_at).toLocaleString("ar-IQ")}</p></div><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${isExpired ? "bg-[#f7e6e6] text-[#9b3434]" : "bg-[#e3eee9] text-[#0b4d3e]"}`}>{isExpired ? "منتهي الصلاحية" : "فعال"}</span></div><p className="mt-2 truncate font-mono text-[10px] text-[#3159d8]">{itemUrl}</p><div className="mt-2 flex gap-2"><button disabled={isExpired} onClick={() => void copy(itemUrl)} className="rounded-lg border border-[#cbd4f5] px-3 py-1.5 text-[10px] font-bold text-[#142c9b] disabled:opacity-40">نسخ</button><button disabled={isExpired} onClick={() => void share(itemUrl)} className="rounded-lg border border-[#cbd4f5] px-3 py-1.5 text-[10px] font-bold text-[#142c9b] disabled:opacity-40">مشاركة</button></div></article>; }) : <p className="rounded-xl border border-dashed border-[#cbd4f5] p-5 text-center text-xs text-[#58617e]">لا يوجد سجل روابط بعد.</p>}</div></div></div>;
 }

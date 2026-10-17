@@ -1,0 +1,46 @@
+workflows:
+  avenmedia-macos-dmgs:
+    name: Avenmedia macOS DMGs (Apple Silicon + Intel)
+    instance_type: mac_mini_m2
+    max_build_duration: 45
+    environment:
+      xcode: latest
+    scripts:
+      - name: Set up Node.js 22 and pnpm
+        script: |
+          set -euo pipefail
+          brew list --versions node@22 >/dev/null 2>&1 || brew install node@22
+          brew link --overwrite --force node@22
+          node --version
+          npm install --global pnpm@9.15.5
+          pnpm --version
+      - name: Set up Rust and Apple targets
+        script: |
+          set -euo pipefail
+          if [ ! -x "$HOME/.cargo/bin/rustup" ]; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+          fi
+          source "$HOME/.cargo/env"
+          rustup toolchain install stable --profile minimal
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - name: Install project dependencies
+        script: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+      - name: Build static web frontend
+        script: |
+          set -euo pipefail
+          pnpm build
+      - name: Build Apple Silicon DMG
+        script: |
+          set -euo pipefail
+          export PATH="$HOME/.cargo/bin:$PATH"
+          APPLE_SIGNING_IDENTITY="-" pnpm tauri build --target aarch64-apple-darwin --bundles dmg
+      - name: Build Intel DMG
+        script: |
+          set -euo pipefail
+          export PATH="$HOME/.cargo/bin:$PATH"
+          APPLE_SIGNING_IDENTITY="-" pnpm tauri build --target x86_64-apple-darwin --bundles dmg
+    artifacts:
+      - src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+      - src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg

@@ -19,22 +19,38 @@
 @font-face{font-family:"Aven Arabic Fallback";src:url("/fonts/NotoSansArabic-Bold.ttf") format("truetype");font-style:normal;font-weight:700;font-display:swap}
 html,body,body *{font-family:Arial,"Aven Arial Fallback","Aven Arabic Fallback",Helvetica,sans-serif!important}
 
-/* Workspace UX: the desktop rail is a slim edge tab until the pointer enters it. */
+/* Workspace UX: keep the icon rail on the physical right and expand it on hover/focus. */
 @media (min-width: 901px) {
   .workspace-grid { display: block !important; }
   .desktop-rail {
     position: fixed !important;
     inset-block: 0;
-    inset-inline-end: 0;
+    right: 0 !important;
+    left: auto !important;
     z-index: 70;
-    width: 260px !important;
+    width: 72px !important;
     min-height: 100vh !important;
-    transform: translateX(calc(100% - 13px));
-    transition: transform .2s ease, box-shadow .2s ease;
+    padding-inline: 6px !important;
+    transform: none !important;
+    transition: width .14s ease, padding .14s ease, box-shadow .14s ease;
     box-shadow: -8px 0 24px rgba(8,13,36,.08);
+    border-left-width: 0 !important;
+    border-right-style: solid !important;
+    border-right-width: 1px !important;
+    overflow-x: hidden;
     overflow-y: auto;
   }
-  .desktop-rail:hover, .desktop-rail:focus-within { transform: translateX(0); box-shadow: -16px 0 40px rgba(8,13,36,.18); }
+  .desktop-rail:hover, .desktop-rail:focus-within { width: 260px !important; padding-inline: 16px !important; box-shadow: -16px 0 40px rgba(8,13,36,.18); }
+  .desktop-rail:not(:hover):not(:focus-within) .desktop-rail-copy { display: none !important; }
+  .desktop-rail:not(:hover):not(:focus-within) .desktop-rail-submenu { display: none !important; }
+  .desktop-rail:not(:hover):not(:focus-within) .desktop-rail-brand { justify-content: center; gap: 0; padding-inline: 0 !important; }
+  .desktop-rail:hover .desktop-rail-brand, .desktop-rail:focus-within .desktop-rail-brand { justify-content: flex-start; gap: .75rem; padding-inline: .5rem !important; }
+  .desktop-rail:not(:hover):not(:focus-within) nav button,
+  .desktop-rail:not(:hover):not(:focus-within) .desktop-rail-settings { justify-content: center; padding-inline: 8px !important; }
+  .desktop-rail:hover nav button, .desktop-rail:focus-within nav button,
+  .desktop-rail:hover .desktop-rail-settings, .desktop-rail:focus-within .desktop-rail-settings { justify-content: flex-start; }
+  .desktop-rail:not(:hover):not(:focus-within) .desktop-rail-sync { padding: 8px !important; }
+  .desktop-rail:not(:hover):not(:focus-within) .desktop-rail-sync > div { justify-content: center !important; margin: 0 !important; }
   .workspace-main { min-height: 100vh; padding-inline: clamp(22px, 6vw, 100px) !important; }
 }
 @media (max-width: 900px) {

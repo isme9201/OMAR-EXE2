@@ -182,11 +182,11 @@ export function DashboardApp({ page }: { page: WorkspacePage }) {
   return (
     <main onClickCapture={handleActionCapture} className={`app-shell ${appTheme} transition-colors duration-300`}>
       <div className="workspace-grid grid min-h-screen grid-cols-1">
-        <aside className={`desktop-rail sticky top-0 h-screen border-l ${dark ? "border-white/10 bg-[#17233b]" : "border-[#cbd4f5] bg-[#e6ebff]"} px-4 py-5`} aria-label="القائمة الجانبية — مرر المؤشر من الحافة لإظهارها">
+        <aside className={`desktop-rail sticky top-0 h-screen border-l ${dark ? "border-white/10 bg-[#17233b]" : "border-[#cbd4f5] bg-[#e6ebff]"} px-4 py-5`} aria-label="القائمة الجانبية — أيقونات التنقل، مرّر المؤشر للتوسيع">
           <div className="flex h-full flex-col">
-            <Link href="/" className="flex items-center gap-3 px-2 pb-8" aria-label="العودة إلى لوحة الإنتاج">
+            <Link href="/" className="desktop-rail-brand flex items-center gap-3 px-2 pb-8" aria-label="العودة إلى لوحة الإنتاج">
               <span className="grid h-11 w-11 place-items-center overflow-hidden rounded-xl bg-[#142c9b] shadow-lg shadow-[#142c9b]/20"><img src="/branding/aven-logo-192.png" alt="رمز Avenmedia" className="h-8 w-8 object-contain" /></span>
-              <span>
+              <span className="desktop-rail-copy">
                 <strong className="brand-wordmark block" dir="ltr">Aven<span>media</span></strong>
                 <span className="font-mono block pt-0.5 text-[9px] tracking-[.13em] text-[#58617e]">PRODUCTION OFFICE</span>
               </span>
@@ -196,15 +196,17 @@ export function DashboardApp({ page }: { page: WorkspacePage }) {
                 const selected = selectedNavGroup === group.label;
                 const expanded = openNavGroup === group.label;
                 const activePage = group.items.find((item) => item.page === safePage);
+                const GroupIcon = group.items[0]?.icon;
                 return <section key={group.label} aria-label={group.label}>
-                  <button type="button" aria-expanded={expanded} onClick={() => {
+                  <button type="button" aria-label={group.label} title={group.label} aria-expanded={expanded} onClick={() => {
                     if (selected) setOpenNavGroup(expanded ? '' : group.label);
                     else { setSelectedNavGroup(group.label); setOpenNavGroup(''); }
                   }} className={`flex w-full items-center gap-2 rounded-xl border px-3 py-2.5 text-right transition ${selected ? 'border-[#cbd4f5] bg-white/55 text-[#142c9b]' : dark ? 'border-transparent text-[#e6ebff] hover:bg-white/7' : 'border-transparent text-[#41534b] hover:bg-white/65'}`}>
-                    <span className="min-w-0 flex-1"><span className="block text-xs font-extrabold">{group.label}</span>{activePage && <span className="mt-0.5 block truncate text-[10px] opacity-75">{activePage.label}</span>}</span>
-                    <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                    {GroupIcon && <GroupIcon className="h-[17px] w-[17px] shrink-0 stroke-[1.8]" />}
+                    <span className="desktop-rail-copy min-w-0 flex-1"><span className="block text-xs font-extrabold">{group.label}</span>{activePage && <span className="mt-0.5 block truncate text-[10px] opacity-75">{activePage.label}</span>}</span>
+                    <ChevronDown className={`desktop-rail-copy h-4 w-4 shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`} />
                   </button>
-                  {expanded && <div className="mt-1 space-y-1 border-r border-[#cbd4f5] pr-2">
+                  {expanded && <div className="desktop-rail-submenu mt-1 space-y-1 border-r border-[#cbd4f5] pr-2">
                     {group.items.map((item) => {
                       const Icon = item.icon;
                       const active = safePage === item.page;
@@ -216,12 +218,12 @@ export function DashboardApp({ page }: { page: WorkspacePage }) {
                 </section>;
               })}
             </nav>
-            <div className="mt-7 px-3"><RuleLabel>الإدارة</RuleLabel></div>
-            <Link href="/settings" className={`mt-2 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${safePage === "settings" ? "bg-[#142c9b] text-white" : dark ? "text-[#e6ebff] hover:bg-white/7" : "text-[#41534b] hover:bg-white/65"}`}><Settings2 className="h-[17px] w-[17px]" />الإعدادات</Link>
-            <div className={`mt-auto rounded-2xl border p-3.5 ${dark ? "border-white/10 bg-white/5" : "border-[#d8cebf] bg-[#ffffff]"}`}>
-              <div className="mb-2 flex items-center justify-between"><RuleLabel>حالة المزامنة</RuleLabel><span className={`h-2 w-2 rounded-full ${syncStatus.online ? "bg-[#56a478]" : "bg-amber-500"}`} /></div>
-              <p className="m-0 text-xs leading-6 text-[#58617e]">{!syncStatus.online ? `دون اتصال؛ ${syncStatus.queued} تغيير بانتظار المزامنة.` : syncStatus.blocked ? `${syncStatus.blocked} تغيير متوقف بسبب تعارض يحتاج مراجعة.` : syncStatus.queued ? `جارٍ مزامنة ${syncStatus.queued} تغيير محفوظ محلياً.` : "متصل. تُحفظ آخر البيانات محلياً عند عودة الانقطاع."}</p>
-              {syncStatus.online && syncStatus.queued > syncStatus.blocked && <button onClick={() => void retryOfflineSync()} className="mt-2 rounded-lg border border-[#cbd4f5] px-2 py-1 text-[10px] font-bold text-[#142c9b]">إعادة المزامنة الآن</button>}
+            <div className="desktop-rail-copy mt-7 px-3"><RuleLabel>الإدارة</RuleLabel></div>
+            <Link href="/settings" aria-label="الإعدادات" title="الإعدادات" className={`desktop-rail-settings mt-2 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${safePage === "settings" ? "bg-[#142c9b] text-white" : dark ? "text-[#e6ebff] hover:bg-white/7" : "text-[#41534b] hover:bg-white/65"}`}><Settings2 className="h-[17px] w-[17px] shrink-0" /><span className="desktop-rail-copy">الإعدادات</span></Link>
+            <div className={`desktop-rail-sync mt-auto rounded-2xl border p-3.5 ${dark ? "border-white/10 bg-white/5" : "border-[#d8cebf] bg-[#ffffff]"}`} aria-label="حالة المزامنة">
+              <div className="mb-2 flex items-center justify-between"><span className="desktop-rail-copy"><RuleLabel>حالة المزامنة</RuleLabel></span><span aria-label={syncStatus.online ? "متصل" : "دون اتصال"} title={syncStatus.online ? "متصل" : "دون اتصال"} className={`h-2 w-2 rounded-full ${syncStatus.online ? "bg-[#56a478]" : "bg-amber-500"}`} /></div>
+              <p className="desktop-rail-copy m-0 text-xs leading-6 text-[#58617e]">{!syncStatus.online ? `دون اتصال؛ ${syncStatus.queued} تغيير بانتظار المزامنة.` : syncStatus.blocked ? `${syncStatus.blocked} تغيير متوقف بسبب تعارض يحتاج مراجعة.` : syncStatus.queued ? `جارٍ مزامنة ${syncStatus.queued} تغيير محفوظ محلياً.` : "متصل. تُحفظ آخر البيانات محلياً عند عودة الانقطاع."}</p>
+              {syncStatus.online && syncStatus.queued > syncStatus.blocked && <button onClick={() => void retryOfflineSync()} className="desktop-rail-copy mt-2 rounded-lg border border-[#cbd4f5] px-2 py-1 text-[10px] font-bold text-[#142c9b]">إعادة المزامنة الآن</button>}
             </div>
           </div>
         </aside>

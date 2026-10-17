@@ -11,13 +11,16 @@ const bidiFactory = (typeof bidiModule === 'function' ? bidiModule : bidiModule.
 };
 const bidi = bidiFactory();
 const ARABIC = /[\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff\ufb50-\ufdff\ufe70-\ufeff]/;
+const LTR_SEQUENCE = /[\p{Sc}]?[+-]?[A-Za-z\p{Nd}](?:[A-Za-z\p{Nd}.,%\/:;+\-@#&_]*[A-Za-z\p{Nd}%])?/gu;
 
 export type AvenmediaPdfFonts = { font: PDFFont; bold: PDFFont; arabicFont: PDFFont; arabicBold: PDFFont };
+export type PdfVisualTextRun = { text: string; script: 'arabic' | 'latin' };
 
 /** Shape Arabic letters and reorder mixed Arabic/Latin text for PDF's left-to-right operators. */
 export function pdfVisualText(value: string) {
   if (!ARABIC.test(value)) return value;
-  const shaped = arabicShaper.convertArabic(value);
+  const isolated = value.replace(LTR_SEQUENCE, '\u2066$&\u2069');
+  const shaped = arabicShaper.convertArabic(isolated);
   const levels = bidi.getEmbeddingLevels(shaped, 'rtl');
   const chars = Array.from(shaped);
   const offsets: number[] = [0];
@@ -37,10 +40,26 @@ export function pdfVisualText(value: string) {
     const reversed = chars.slice(left, right + 1).reverse();
     chars.splice(left, right - left + 1, ...reversed);
   }
-  return chars.join('');
+  return chars.join('').replace(/[\u2066\u2069]/g, '');
 }
 
-/** Choose Arial-compatible Latin glyphs or Arabic glyphs before every PDF drawText call. */
+function groupVisualRuns(visualText: string): PdfVisualTextRun[] {
+  const runs: PdfVisualTextRun[] = [];
+  for (const character of Array.from(visualText)) {
+    const script = ARABIC.test(character) ? 'arabic' : 'latin';
+    const previous = runs[runs.length - 1];
+    if (previous?.script === script) previous.text += character;
+    else runs.push({ text: character, script });
+  }
+  return runs;
+}
+
+/** Return physical left-to-right PDF runs after shaping and Unicode bidi reordering. */
+export function pdfVisualTextRuns(value: string): PdfVisualTextRun[] {
+  return groupVisualRuns(pdfVisualText(value));
+}
+
+/** Choose Arabic or Latin fonts per visual text run before every PDF drawText call. */
 export function enableArabicPdfText(document: PDFDocument, fonts: AvenmediaPdfFonts) {
   type AddPageArgument = Parameters<PDFDocument['addPage']>[0];
   const originalAddPage = document.addPage.bind(document);
@@ -50,9 +69,34 @@ export function enableArabicPdfText(document: PDFDocument, fonts: AvenmediaPdfFo
     const originalDrawText = page.drawText.bind(page);
     const wrappedDrawText = ((text: string, options?: Parameters<PDFPage['drawText']>[1]) => {
       const isBold = options?.font === fonts.bold || options?.font === fonts.arabicBold;
-      const usesArabic = ARABIC.test(text);
-      const font = usesArabic ? (isBold ? fonts.arabicBold : fonts.arabicFont) : (isBold ? fonts.bold : fonts.font);
-      return originalDrawText(pdfVisualText(text), { ...options, font });
+      const latinFont = isBold ? fonts.bold : fonts.font;
+      const arabicFont = isBold ? fonts.arabicBold : fonts.arabicFont;
+      if (!ARABIC.test(text)) return originalDrawText(text, { ...options, font: latinFont });
+
+      const visualText = pdfVisualText(text);
+      // No current Avenmedia PDF template uses maxWidth; let pdf-lib retain its own wrapping
+      // behavior if a future call adds it rather than silently changing that layout.
+      if (options?.maxWidth !== undefined) return originalDrawText(visualText, { ...options, font: arabicFont });
+
+      const lines = visualText.split(/\r\n|\r|\n/);
+      const size = options?.size ?? 24;
+      const lineHeight = options?.lineHeight ?? arabicFont.heightAtSize(size) * 1.2;
+      const startX = options?.x ?? 0;
+      const startY = options?.y ?? 0;
+      for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+        const runs = groupVisualRuns(lines[lineIndex]);
+        let x = startX;
+        for (const run of runs) {
+          const font = run.script === 'arabic' ? arabicFont : latinFont;
+          originalDrawText(run.text, {
+            ...options,
+            x,
+            y: startY - lineIndex * lineHeight,
+            font,
+          });
+          x += font.widthOfTextAtSize(run.text, size);
+        }
+      }
     }) as PDFPage['drawText'];
     (page as unknown as { drawText: PDFPage['drawText'] }).drawText = wrappedDrawText;
     return page;

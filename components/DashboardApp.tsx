@@ -23,6 +23,8 @@ import { EmployeeTasks } from "@/components/EmployeeTasks";
 import { RequestSearchCard } from "@/components/RequestSearchCard";
 import { NotificationBell } from "@/components/NotificationBell";
 import { UploadRoom } from "@/components/UploadRoom";
+import { shareToChannel } from "@/lib/share-targets";
+import DataStorageSettings from "@/components/DataStorageSettings";
 
 type Task = { id: number; recordId?: string; client: string; title: string; stage: string; due: string; owner: string; progress: number; tone: string };
 type ModalKind = "booking" | "magic" | "invoice" | "upload" | null;
@@ -32,10 +34,20 @@ const navGroups: { label: string; items: { page: WorkspacePage; label: string; i
   { label: "مكتب العمل", items: [
     { page: "overview", label: "نظرة الاستوديو", icon: Grid2X2 },
     { page: "calendar", label: "الطلبات والعملاء", icon: ClipboardList },
+    { page: "clients", label: "طلبات العملاء", icon: UsersRound },
   ] },
   { label: "التنفيذ والإدارة", items: [
     { page: "production", label: "غرفة الإنتاج", icon: Video },
     { page: "operations", label: "مركز العمليات", icon: Archive, tag: "مُجمّع" },
+    { page: "uploads", label: "غرفة الرفع", icon: UploadCloud },
+  ] },
+  { label: "المالية والتقارير", items: [
+    { page: "finance", label: "المالية", icon: WalletCards },
+    { page: "reports", label: "التقارير", icon: ReceiptText },
+  ] },
+  { label: "الفريق والأصول", items: [
+    { page: "team", label: "الفريق والمحادثات", icon: UsersRound },
+    { page: "equipment", label: "المعدات والمخزون", icon: Wrench },
   ] },
 ];
 
@@ -80,7 +92,11 @@ export function DashboardApp({ page }: { page: WorkspacePage }) {
   const [linkDialog, setLinkDialog] = useState<{ url: string; expiresAt: string } | null>(null);
   const [linkHistory, setLinkHistory] = useState<UploadLink[]>([]);
   const [linksLoading, setLinksLoading] = useState(false);
+  const [selectedNavGroup, setSelectedNavGroup] = useState('');
+  const [openNavGroup, setOpenNavGroup] = useState('');
 
+  useEffect(() => { document.documentElement.classList.toggle("dark", dark); }, [dark]);
+  useEffect(() => { setSelectedNavGroup(''); setOpenNavGroup(''); }, [page]);
   useEffect(() => { let cancelled = false; void getStudioThemePreference().then((theme) => { if (!cancelled && theme) { setDark(theme === "dark"); window.localStorage.setItem("photomedia-theme", theme); } }); return () => { cancelled = true; }; }, []);
   useEffect(() => {
     let active = true;
@@ -165,8 +181,8 @@ export function DashboardApp({ page }: { page: WorkspacePage }) {
 
   return (
     <main onClickCapture={handleActionCapture} className={`app-shell ${appTheme} transition-colors duration-300`}>
-      <div className="workspace-grid grid min-h-screen grid-cols-[250px_minmax(0,1fr)]">
-        <aside className={`desktop-rail sticky top-0 h-screen border-l ${dark ? "border-white/10 bg-[#111a18]" : "border-[#cbd4f5] bg-[#e6ebff]"} px-4 py-5`}>
+      <div className="workspace-grid grid min-h-screen grid-cols-1">
+        <aside className={`desktop-rail sticky top-0 h-screen border-l ${dark ? "border-white/10 bg-[#17233b]" : "border-[#cbd4f5] bg-[#e6ebff]"} px-4 py-5`} aria-label="القائمة الجانبية — مرر المؤشر من الحافة لإظهارها">
           <div className="flex h-full flex-col">
             <Link href="/" className="flex items-center gap-3 px-2 pb-8" aria-label="العودة إلى لوحة الإنتاج">
               <span className="grid h-11 w-11 place-items-center overflow-hidden rounded-xl bg-[#142c9b] shadow-lg shadow-[#142c9b]/20"><img src="/branding/aven-logo-192.png" alt="رمز Avenmedia" className="h-8 w-8 object-contain" /></span>
@@ -175,17 +191,30 @@ export function DashboardApp({ page }: { page: WorkspacePage }) {
                 <span className="font-mono block pt-0.5 text-[9px] tracking-[.13em] text-[#58617e]">PRODUCTION OFFICE</span>
               </span>
             </Link>
-            <nav className="space-y-5" aria-label="التنقل الرئيسي">
-              {navGroups.map((group) => <section key={group.label} aria-label={group.label}>
-                <div className="mb-2 px-3"><RuleLabel>{group.label}</RuleLabel></div>
-                <div className="space-y-1">{group.items.map((item) => {
-                  const Icon = item.icon;
-                  const active = safePage === item.page;
-                  return <Link key={item.page} aria-current={active ? "page" : undefined} title={item.label} href={item.page === "overview" ? "/" : `/${item.page}`} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${active ? "bg-[#142c9b] text-white shadow-md shadow-[#142c9b]/15" : dark ? "text-[#e6ebff] hover:bg-white/7" : "text-[#41534b] hover:bg-white/65"}`}>
-                    <Icon className="h-[17px] w-[17px] stroke-[1.8]" /> <span className="flex-1">{item.label}</span>{item.tag && <span className={`font-mono rounded-md px-1.5 py-0.5 text-[10px] ${active ? "bg-white/15 text-white" : "bg-[#dfe8e2] text-[#142c9b]"}`}>{item.tag}</span>}
-                  </Link>;
-                })}</div>
-              </section>)}
+            <nav className="space-y-2" aria-label="التنقل الرئيسي">
+              {navGroups.map((group) => {
+                const selected = selectedNavGroup === group.label;
+                const expanded = openNavGroup === group.label;
+                const activePage = group.items.find((item) => item.page === safePage);
+                return <section key={group.label} aria-label={group.label}>
+                  <button type="button" aria-expanded={expanded} onClick={() => {
+                    if (selected) setOpenNavGroup(expanded ? '' : group.label);
+                    else { setSelectedNavGroup(group.label); setOpenNavGroup(''); }
+                  }} className={`flex w-full items-center gap-2 rounded-xl border px-3 py-2.5 text-right transition ${selected ? 'border-[#cbd4f5] bg-white/55 text-[#142c9b]' : dark ? 'border-transparent text-[#e6ebff] hover:bg-white/7' : 'border-transparent text-[#41534b] hover:bg-white/65'}`}>
+                    <span className="min-w-0 flex-1"><span className="block text-xs font-extrabold">{group.label}</span>{activePage && <span className="mt-0.5 block truncate text-[10px] opacity-75">{activePage.label}</span>}</span>
+                    <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                  </button>
+                  {expanded && <div className="mt-1 space-y-1 border-r border-[#cbd4f5] pr-2">
+                    {group.items.map((item) => {
+                      const Icon = item.icon;
+                      const active = safePage === item.page;
+                      return <Link key={item.page} aria-current={active ? 'page' : undefined} title={item.label} href={item.page === 'overview' ? '/' : `/${item.page}`} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${active ? 'bg-[#142c9b] text-white shadow-md shadow-[#142c9b]/15' : dark ? 'text-[#e6ebff] hover:bg-white/7' : 'text-[#41534b] hover:bg-white/65'}`}>
+                        <Icon className="h-[17px] w-[17px] stroke-[1.8]" /> <span className="flex-1">{item.label}</span>{item.tag && <span className={`rounded-md px-1.5 py-0.5 font-mono text-[10px] ${active ? 'bg-white/15 text-white' : 'bg-[#dfe8e2] text-[#142c9b]'}`}>{item.tag}</span>}
+                      </Link>;
+                    })}
+                  </div>}
+                </section>;
+              })}
             </nav>
             <div className="mt-7 px-3"><RuleLabel>الإدارة</RuleLabel></div>
             <Link href="/settings" className={`mt-2 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${safePage === "settings" ? "bg-[#142c9b] text-white" : dark ? "text-[#e6ebff] hover:bg-white/7" : "text-[#41534b] hover:bg-white/65"}`}><Settings2 className="h-[17px] w-[17px]" />الإعدادات</Link>
@@ -327,12 +356,8 @@ function UploadsPage({ setModal, onShowHistory }: { setModal: (kind: ModalKind) 
 }
 
 function SettingsPage({ dark, setDark }: { dark: boolean; setDark: (value: boolean) => void }) {
-  const [autosave, setAutosave] = useState(true);
-  const settings: { label: string; description: string; value: boolean; setValue: (value: boolean) => void }[] = [
-    { label: "وضع المظهر", description: "اختر مظهراً مريحاً لغرفة التحرير", value: dark, setValue: setDark },
-    { label: "حفظ تلقائي محلي", description: "احتفظ بنسخة قراءة محلية عند انقطاع الشبكة", value: autosave, setValue: setAutosave },
-  ];
-  return <div className="space-y-5 enter-sheet"><section className="paper-panel rounded-[22px] border border-[#cbd4f5]"><div className="border-b border-[#dfe5fb] p-5"><RuleLabel>مساحة العمل</RuleLabel><h2 className="mt-1 text-xl font-extrabold">التفضيلات اليومية</h2></div>{settings.map((setting) => <div key={setting.label} className="flex items-center justify-between gap-5 border-b border-[#dfe5fb] p-5 last:border-0"><div><strong className="text-sm">{setting.label}</strong><p className="mt-1 text-xs leading-6 text-[#58617e]">{setting.description}</p></div><button aria-label={setting.label} onClick={() => setting.setValue(!setting.value)} className={`relative h-7 w-12 rounded-full transition ${setting.value ? "bg-[#142c9b]" : "bg-[#d6d0c6]"}`}><span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition ${setting.value ? "right-6" : "right-1"}`} /></button></div>)}</section><section className="paper-panel rounded-[22px] border border-[#cbd4f5] p-5"><RuleLabel>الحماية</RuleLabel><h2 className="mt-1 text-xl font-extrabold">الأمان والوصول</h2><div className="mt-5 grid gap-3 md:grid-cols-3"><SecurityTile icon={LockKeyhole} label="قفل تلقائي" detail="بعد 15 دقيقة" /><SecurityTile icon={ShieldCheck} label="سجل تدقيق" detail="نشط ومشفّر" /><SecurityTile icon={Archive} label="نسخ احتياطي" detail="كل ليلة 02:00" /></div></section></div>;
+  const settings = [{ label: "وضع المظهر", description: "يُحفظ اختيارك لهذا الحساب وهذا الجهاز.", value: dark, setValue: setDark }];
+  return <div className="space-y-5 enter-sheet"><section className="paper-panel rounded-[22px] border border-[#cbd4f5]"><div className="border-b border-[#dfe5fb] p-5"><RuleLabel>مساحة العمل</RuleLabel><h2 className="mt-1 text-xl font-extrabold">التفضيلات اليومية</h2></div>{settings.map((setting) => <div key={setting.label} className="flex items-center justify-between gap-5 border-b border-[#dfe5fb] p-5 last:border-0"><div><strong className="text-sm">{setting.label}</strong><p className="mt-1 text-xs leading-6 text-[#58617e]">{setting.description}</p></div><button role="switch" aria-checked={setting.value} aria-label={setting.label} onClick={() => setting.setValue(!setting.value)} className={`relative h-7 w-12 rounded-full transition ${setting.value ? "bg-[#142c9b]" : "bg-[#d6d0c6]"}`}><span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition ${setting.value ? "right-6" : "right-1"}`} /></button></div>)}</section><DataStorageSettings /><section className="paper-panel rounded-[22px] border border-[#cbd4f5] p-5"><RuleLabel>الحماية</RuleLabel><h2 className="mt-1 text-xl font-extrabold">الأمان والوصول</h2><div className="mt-5 grid gap-3 md:grid-cols-3"><SecurityTile icon={LockKeyhole} label="قفل تلقائي" detail="بعد 15 دقيقة" /><SecurityTile icon={ShieldCheck} label="سجل تدقيق" detail="نشط ومشفّر" /><SecurityTile icon={Archive} label="نسخ احتياطي" detail="تصدير يدوي عند الطلب" /></div></section></div>;
 }
 
 function MiniStat({ value, label }: { value: string; label: string }) { return <div className="rounded-xl bg-[#f7f9ff] p-3"><strong className="font-mono text-2xl text-[#142c9b]">{value}</strong><span className="mt-1 block text-[10px] text-[#697870]">{label}</span></div>; }
@@ -350,8 +375,9 @@ function UploadLinkDialog({ link, history, loading, onClose, onRefresh }: { link
   const [dateFilter, setDateFilter] = useState("");
   const filtered = history.filter((item) => { const text = `${item.client_name || ""} ${item.token}`.toLowerCase(); return (!query || text.includes(query.toLowerCase())) && (!dateFilter || item.created_at.slice(0, 10) === dateFilter); });
   const copy = async (url: string) => { await navigator.clipboard?.writeText(url); };
-  const share = async (url: string) => { if (navigator.share) await navigator.share({ title: "رابط رفع Avenmedia", text: "رابط رفع الملفات", url }); else await copy(url); };
+  const share = async (url: string) => { try { await shareToChannel('system', { title: "رابط رفع Avenmedia", text: "رابط رفع الملفات", url }); } catch (cause) { if (!(cause instanceof DOMException && cause.name === 'AbortError')) window.alert(cause instanceof Error ? cause.message : 'تعذرت مشاركة الرابط'); } };
+  const shareTo = async (url: string, channel: 'whatsapp' | 'telegram' | 'instagram') => { try { await shareToChannel(channel, { title: "رابط رفع Avenmedia", text: "رابط رفع الملفات", url }); } catch (cause) { window.alert(cause instanceof Error ? cause.message : 'تعذرت مشاركة الرابط'); } };
   const urlFor = (token: string) => `https://avenmedia.pages.dev/aven-upload.html?token=${encodeURIComponent(token)}`;
   const expired = (item: UploadLink) => Boolean(item.revoked_at) || new Date(item.expires_at).getTime() <= Date.now();
-  return <div className="fixed inset-0 z-[60] grid place-items-center bg-[#080d24]/55 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="سجل روابط الرفع"><div className="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-[24px] bg-white p-6 text-[#080d24] shadow-2xl" dir="rtl"><div className="flex items-start justify-between gap-3"><div><RuleLabel>روابط الرفع / 24 ساعة</RuleLabel><h2 className="font-naskh mt-1 text-2xl font-bold">رابط الرفع الحقيقي</h2></div><button onClick={onClose} aria-label="إغلاق" className="rounded-full p-2 text-[#58617e] hover:bg-[#e6ebff]"><X className="h-5" /></button></div>{link.url && <div className="mt-5 rounded-2xl border border-[#cbd4f5] bg-[#f2f5ff] p-4"><p className="m-0 break-all font-mono text-xs leading-6 text-[#142c9b]">{link.url}</p><p className="mt-2 text-xs font-bold text-[#58617e]">ينتهي: {new Date(link.expiresAt).toLocaleString("ar-IQ")}</p><div className="mt-3 flex flex-wrap gap-2"><button onClick={() => void copy(link.url)} className="inline-flex items-center gap-2 rounded-xl bg-[#142c9b] px-4 py-2.5 text-xs font-extrabold text-white"><ClipboardList className="h-4" />نسخ الرابط</button><button onClick={() => void share(link.url)} className="inline-flex items-center gap-2 rounded-xl border border-[#cbd4f5] px-4 py-2.5 text-xs font-extrabold text-[#142c9b]"><Share2 className="h-4" />مشاركة</button></div></div>}<div className="mt-6 flex items-center justify-between"><div><RuleLabel>LINK HISTORY</RuleLabel><h3 className="mt-1 text-lg font-extrabold">سجل الروابط السابقة</h3></div><button onClick={onRefresh} className="rounded-xl border border-[#cbd4f5] px-3 py-2 text-xs font-bold text-[#142c9b]">{loading ? "جارٍ التحميل…" : "تحديث السجل"}</button></div><div className="mt-3 grid gap-2 sm:grid-cols-[1fr_180px]"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="بحث باسم العميل أو token" className="h-10 rounded-xl border border-[#cbd4f5] px-3 text-xs outline-none focus:border-[#142c9b]" /><input type="date" value={dateFilter} onChange={(event) => setDateFilter(event.target.value)} className="h-10 rounded-xl border border-[#cbd4f5] px-3 text-xs outline-none focus:border-[#142c9b]" /></div><div className="mt-3 space-y-2">{filtered.length ? filtered.map((item) => { const isExpired = expired(item); const itemUrl = urlFor(item.token); return <article key={item.id} className="rounded-xl border border-[#e2e7f8] bg-[#f7f9ff] p-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><b className="text-xs">{item.client_name || "بدون اسم عميل"}</b><p className="mt-1 text-[10px] text-[#58617e]">أنشئ {new Date(item.created_at).toLocaleString("ar-IQ")} · ينتهي {new Date(item.expires_at).toLocaleString("ar-IQ")}</p></div><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${isExpired ? "bg-[#e6ebff] text-[#9b3434]" : "bg-[#e6ebff] text-[#142c9b]"}`}>{isExpired ? "منتهي الصلاحية" : "فعال"}</span></div><p className="mt-2 truncate font-mono text-[10px] text-[#3159d8]">{itemUrl}</p><div className="mt-2 flex gap-2"><button disabled={isExpired} onClick={() => void copy(itemUrl)} className="rounded-lg border border-[#cbd4f5] px-3 py-1.5 text-[10px] font-bold text-[#142c9b] disabled:opacity-40">نسخ</button><button disabled={isExpired} onClick={() => void share(itemUrl)} className="rounded-lg border border-[#cbd4f5] px-3 py-1.5 text-[10px] font-bold text-[#142c9b] disabled:opacity-40">مشاركة</button></div></article>; }) : <p className="rounded-xl border border-dashed border-[#cbd4f5] p-5 text-center text-xs text-[#58617e]">لا يوجد سجل روابط بعد.</p>}</div></div></div>;
+  return <div className="fixed inset-0 z-[60] grid place-items-center bg-[#080d24]/55 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="سجل روابط الرفع"><div className="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-[24px] bg-white p-6 text-[#080d24] shadow-2xl" dir="rtl"><div className="flex items-start justify-between gap-3"><div><RuleLabel>روابط الرفع / 24 ساعة</RuleLabel><h2 className="font-naskh mt-1 text-2xl font-bold">رابط الرفع الحقيقي</h2></div><button onClick={onClose} aria-label="إغلاق" className="rounded-full p-2 text-[#58617e] hover:bg-[#e6ebff]"><X className="h-5" /></button></div>{link.url && <div className="mt-5 rounded-2xl border border-[#cbd4f5] bg-[#f2f5ff] p-4"><p className="m-0 break-all font-mono text-xs leading-6 text-[#142c9b]">{link.url}</p><p className="mt-2 text-xs font-bold text-[#58617e]">ينتهي: {new Date(link.expiresAt).toLocaleString("ar-IQ")}</p><div className="mt-3 flex flex-wrap gap-2"><button onClick={() => void copy(link.url)} className="inline-flex items-center gap-2 rounded-xl bg-[#142c9b] px-4 py-2.5 text-xs font-extrabold text-white"><ClipboardList className="h-4" />نسخ الرابط</button><button onClick={() => void share(link.url)} className="inline-flex items-center gap-2 rounded-xl border border-[#cbd4f5] px-4 py-2.5 text-xs font-extrabold text-[#142c9b]"><Share2 className="h-4" />مشاركة</button><button onClick={() => void shareTo(link.url, "whatsapp")} className="rounded-xl border border-[#cbd4f5] px-3 py-2.5 text-xs font-bold text-[#142c9b]">WhatsApp</button><button onClick={() => void shareTo(link.url, "telegram")} className="rounded-xl border border-[#cbd4f5] px-3 py-2.5 text-xs font-bold text-[#142c9b]">Telegram</button><button onClick={() => void shareTo(link.url, "instagram")} className="rounded-xl border border-[#cbd4f5] px-3 py-2.5 text-xs font-bold text-[#142c9b]">Instagram</button></div></div>}<div className="mt-6 flex items-center justify-between"><div><RuleLabel>LINK HISTORY</RuleLabel><h3 className="mt-1 text-lg font-extrabold">سجل الروابط السابقة</h3></div><button onClick={onRefresh} className="rounded-xl border border-[#cbd4f5] px-3 py-2 text-xs font-bold text-[#142c9b]">{loading ? "جارٍ التحميل…" : "تحديث السجل"}</button></div><div className="mt-3 grid gap-2 sm:grid-cols-[1fr_180px]"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="بحث باسم العميل أو token" className="h-10 rounded-xl border border-[#cbd4f5] px-3 text-xs outline-none focus:border-[#142c9b]" /><input type="date" value={dateFilter} onChange={(event) => setDateFilter(event.target.value)} className="h-10 rounded-xl border border-[#cbd4f5] px-3 text-xs outline-none focus:border-[#142c9b]" /></div><div className="mt-3 space-y-2">{filtered.length ? filtered.map((item) => { const isExpired = expired(item); const itemUrl = urlFor(item.token); return <article key={item.id} className="rounded-xl border border-[#e2e7f8] bg-[#f7f9ff] p-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><b className="text-xs">{item.client_name || "بدون اسم عميل"}</b><p className="mt-1 text-[10px] text-[#58617e]">أنشئ {new Date(item.created_at).toLocaleString("ar-IQ")} · ينتهي {new Date(item.expires_at).toLocaleString("ar-IQ")}</p></div><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${isExpired ? "bg-[#e6ebff] text-[#9b3434]" : "bg-[#e6ebff] text-[#142c9b]"}`}>{isExpired ? "منتهي الصلاحية" : "فعال"}</span></div><p className="mt-2 truncate font-mono text-[10px] text-[#3159d8]">{itemUrl}</p><div className="mt-2 flex gap-2"><button disabled={isExpired} onClick={() => void copy(itemUrl)} className="rounded-lg border border-[#cbd4f5] px-3 py-1.5 text-[10px] font-bold text-[#142c9b] disabled:opacity-40">نسخ</button><button disabled={isExpired} onClick={() => void share(itemUrl)} className="rounded-lg border border-[#cbd4f5] px-3 py-1.5 text-[10px] font-bold text-[#142c9b] disabled:opacity-40">مشاركة</button><button disabled={isExpired} onClick={() => void shareTo(itemUrl, "whatsapp")} className="rounded-lg border border-[#cbd4f5] px-2 py-1.5 text-[10px] font-bold text-[#142c9b] disabled:opacity-40">WhatsApp</button><button disabled={isExpired} onClick={() => void shareTo(itemUrl, "telegram")} className="rounded-lg border border-[#cbd4f5] px-2 py-1.5 text-[10px] font-bold text-[#142c9b] disabled:opacity-40">Telegram</button><button disabled={isExpired} onClick={() => void shareTo(itemUrl, "instagram")} className="rounded-lg border border-[#cbd4f5] px-2 py-1.5 text-[10px] font-bold text-[#142c9b] disabled:opacity-40">Instagram</button></div></article>; }) : <p className="rounded-xl border border-dashed border-[#cbd4f5] p-5 text-center text-xs text-[#58617e]">لا يوجد سجل روابط بعد.</p>}</div></div></div>;
 }

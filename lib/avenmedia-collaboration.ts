@@ -6,7 +6,7 @@ import { uploadCloudinaryChunks, type CloudinaryUploadProgress } from '@/lib/clo
 export type MessageType = 'text' | 'image' | 'video' | 'pdf' | 'file' | 'voice';
 export type CollaborationEmployee = { id: string; name: string; email: string; role: string; specialty?: string | null; is_active?: boolean; presence?: 'online' | 'away' | 'offline' };
 export type SafeOrder = { id: string; title: string; client_name: string | null; client_phone: string | null; due_at: string | null; status: string; task_type: string };
-export type Conversation = { id: string; title: string | null; created_by: string; archived_at: string | null; updated_at: string; members?: CollaborationEmployee[] };
+export type Conversation = { id: string; title: string | null; created_by: string; archived_at: string | null; updated_at: string; archived_for_current_user?: boolean; unread_count?: number; members?: CollaborationEmployee[] };
 export type MessageReaction = { id?: string; message_id?: string; emoji: string; user_id: string };
 export type CollaborationMessage = {
   id: string; conversation_id: string; sender_id: string; body: string; task_id: string | null; created_at: string;
@@ -59,13 +59,17 @@ export async function findOrCreateConversation(otherUserId: string): Promise<Res
   if (error || !conversationId) return ok(null, messageOf(error) || 'تعذر فتح المحادثة المباشرة');
   return getConversation(conversationId);
 }
-export async function listConversations(): Promise<Result<Conversation[]>> {
+export async function listConversations(includeArchived = false): Promise<Result<Conversation[]>> {
   const { data: authData, error: authError } = await db().auth.getUser();
   if (!authData.user) return ok([], messageOf(authError) || 'الجلسة منتهية');
   const rosterResult = await listCollaborationEmployees();
   const { data, error } = await db().from('conversations').select('id,title,created_by,archived_at,updated_at,conversation_members(user_id,archived_at)').order('updated_at', { ascending: false });
-  const rows = (data ?? []).filter((item: any) => item.conversation_members?.some((member: any) => member.user_id === authData.user.id && !member.archived_at)).map((item: any) => ({ ...item, members: (item.conversation_members ?? []).map((member: any) => rosterResult.data.find(person => person.id === member.user_id)).filter(Boolean) }));
-  return ok(rows as Conversation[], messageOf(error) || rosterResult.error);
+  const rows = (data ?? []).filter((item: any) => item.conversation_members?.some((member: any) => member.user_id === authData.user.id && (includeArchived || !member.archived_at))).map((item: any) => ({ ...item, archived_for_current_user: Boolean(item.conversation_members?.find((member: any) => member.user_id === authData.user.id)?.archived_at), members: (item.conversation_members ?? []).map((member: any) => rosterResult.data.find(person => person.id === member.user_id)).filter(Boolean) }));
+  const withUnread = await Promise.all(rows.map(async (row: any) => {
+    const { count } = await db().from('conversation_messages').select('id', { count: 'exact', head: true }).eq('conversation_id', row.id).neq('sender_id', authData.user.id).is('read_at', null);
+    return { ...row, unread_count: count || 0 };
+  }));
+  return ok(withUnread as Conversation[], messageOf(error) || rosterResult.error);
 }
 export async function listConversationMessages(conversationId: string): Promise<Result<CollaborationMessage[]>> {
   const user = (await db().auth.getUser()).data.user;
@@ -156,11 +160,11 @@ export async function uploadChatAttachment(input: ChatUploadInput): Promise<Resu
   const completed = await invokeChatFunction<{ message: CollaborationMessage }>({ action: 'complete_chat_upload', conversationId: input.conversationId, clientMessageId, body: input.body?.trim() || '', replyToMessageId: input.replyToMessageId || null, messageType: input.messageType, asset: { ...asset, bytes: asset.bytes ?? input.file.size, format: asset.format || input.file.name.split('.').pop() || null, original_filename: input.file.name, mime_type: input.file.type || null, duration_seconds: input.durationSeconds || asset.duration || null } });
   return ok(completed.data?.message || null, completed.error || '');
 }
-export async function conversationAction(conversationId: string, action: 'archive' | 'delete' | 'block', userId?: string): Promise<Result<boolean>> {
+export async function conversationAction(conversationId: string, action: 'archive' | 'unarchive' | 'delete' | 'block', userId?: string): Promise<Result<boolean>> {
   const user = (await db().auth.getUser()).data.user;
   if (!user) return ok(false, 'الجلسة منتهية');
   if (action === 'delete') { const { error } = await db().from('conversations').delete().eq('id', conversationId); return ok(!error, messageOf(error)); }
-  if (action === 'archive') { const { error } = await db().from('conversation_members').update({ archived_at: new Date().toISOString() }).eq('conversation_id', conversationId).eq('user_id', user.id); return ok(!error, messageOf(error)); }
+  if (action === 'archive' || action === 'unarchive') { const { error } = await db().from('conversation_members').update({ archived_at: action === 'archive' ? new Date().toISOString() : null }).eq('conversation_id', conversationId).eq('user_id', user.id); return ok(!error, messageOf(error)); }
   const { error } = await db().from('conversation_members').update({ blocked_at: new Date().toISOString() }).eq('conversation_id', conversationId).eq('user_id', userId || user.id);
   return ok(!error, messageOf(error));
 }

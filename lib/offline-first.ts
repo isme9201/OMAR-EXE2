@@ -32,6 +32,7 @@ export type OfflineSyncStatus = {
 const DB_NAME = 'avenmedia-local-first-v1';
 const DB_VERSION = 1;
 const STATUS_EVENT = 'avenmedia-offline-status';
+const LOCAL_SAVING_SETTING_KEY = 'avenmedia-local-saving-enabled';
 const MAX_CACHE_BYTES = 5 * 1024 * 1024;
 const UUID_TABLES = new Set([
   'tasks', 'financial_entries', 'avenmedia_accounts', 'avenmedia_transactions',
@@ -53,6 +54,12 @@ const UUID = () => crypto.randomUUID();
 let dbPromise: Promise<IDBDatabase> | null = null;
 let lastSyncAt: number | null = null;
 const flushByOwner = new Map<string, Promise<void>>();
+
+function localSavingEnabled() {
+  if (typeof window === 'undefined') return true;
+  try { return window.localStorage.getItem(LOCAL_SAVING_SETTING_KEY) !== 'false'; }
+  catch { return true; }
+}
 
 function openDatabase() {
   if (typeof indexedDB === 'undefined') return Promise.reject(new Error('IndexedDB is unavailable'));
@@ -300,7 +307,7 @@ async function overlayPending(owner: string, table: string, url: URL, body: unkn
 }
 
 async function cacheResponse(owner: string, table: string, url: string, response: Response) {
-  if (UNCACHED_TABLES.has(table) || !response.headers.get('content-type')?.includes('json')) return;
+  if (!localSavingEnabled() || UNCACHED_TABLES.has(table) || !response.headers.get('content-type')?.includes('json')) return;
   const body = await response.clone().json().catch(() => undefined);
   if (body === undefined) return;
   const serialized = JSON.stringify(body);
@@ -321,7 +328,7 @@ async function findCachedRows(owner: string, table: string) {
 }
 
 async function patchCachedRows(owner: string, table: string, method: string, url: string, body: unknown, responseBody?: unknown) {
-  if (!table || UNCACHED_TABLES.has(table)) return;
+  if (!localSavingEnabled() || !table || UNCACHED_TABLES.has(table)) return;
   const all = await readAll<CachedResponse>('responses');
   const mutation = { owner, table, method, url, body, createdAt: Date.now(), status: 'pending' } as QueuedWrite;
   const rowsForPost = responseBody !== undefined && bodyRows(responseBody).length ? bodyRows(responseBody) : bodyRows(body);
@@ -386,6 +393,7 @@ function jsonError(message: string, status = 503) {
 }
 
 async function queueMutation(request: Request, owner: string, table: string, body: unknown) {
+  if (!localSavingEnabled()) return jsonError('الحفظ المحلي متوقف؛ أعد تفعيله أو اتصل بالإنترنت قبل حفظ التغيير.', 409);
   if (!QUEUEABLE_TABLES.has(table)) return jsonError('هذا الإجراء يحتاج اتصالاً بالإنترنت ولم يُحفظ في الطابور المحلي.');
   const method = request.method.toUpperCase();
   if (!['POST', 'PATCH', 'PUT', 'DELETE'].includes(method)) return jsonError('نوع التغيير غير مدعوم دون اتصال.');
@@ -589,6 +597,7 @@ export async function offlineSupabaseFetch(input: RequestInfo | URL, init?: Requ
       }
       return response;
     } catch {
+      if (!localSavingEnabled()) return jsonError('الحفظ المحلي متوقف ولا توجد نسخة محلية متاحة لهذا الاستعلام.');
       const local = await cachedResponse(request, owner, table).catch(() => null);
       if (local) { notifyStatus(); return local; }
       return jsonError('لا يوجد اتصال ولا توجد نسخة محلية سابقة لهذا الاستعلام؛ افتح الصفحة مرة واحدة مع الإنترنت أولاً.');

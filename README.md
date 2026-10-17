@@ -47,7 +47,7 @@ The native configuration lives in `src-tauri/`. See [`TAURI_BUILD.md`](./TAURI_B
 
 ## Release artifacts
 
-Run **GitHub Actions → Build Avenmedia → Run workflow** on the existing source branch to create a draft prerelease with the Windows x64 executable and NSIS installer, Apple Silicon and Intel macOS DMGs, Linux amd64 and ARM64 DEB/AppImage packages, `Avenmedia-Web.zip`, and `Avenmedia-Project-Source.zip`.
+Run **GitHub Actions → Build Avenmedia → Run workflow** on the existing source branch to create a draft prerelease with the Windows x64 executable and NSIS installer, Apple Silicon and Intel macOS DMGs, `Avenmedia-Web.zip`, and `Avenmedia-Project-Source.zip`. Manual runs skip Linux packages by default; set the `include_linux` input to `true` only when they are needed. Push-triggered builds include Linux amd64 and ARM64 DEB/AppImage packages.
 
 The standalone Windows executable expects the Microsoft Edge WebView2 Runtime; the NSIS installer includes its offline installer. The macOS packages are ad-hoc signed until Apple Developer signing/notarization secrets are configured. Windows binaries are unsigned until an authorized code-signing certificate is configured.
 
@@ -56,3 +56,5 @@ Before deploying chat, ensure `supabase/migrations/20260920_avenmedia_collaborat
 ## Security and integrations
 
 WhatsApp, NAS, accounting, and other external integrations still require their own credentials and server-side authorization before live operation. Do not embed service-role keys or Cloudinary secrets in this desktop bundle.
+
+The Settings page can disable future offline-cache/outbox writes and select a folder for SQL exports. The export includes only rows visible to the signed-in user under Supabase RLS; it does not include `auth.users`, service-role secrets, or database DDL/schema. Disabling local saving does not erase device data already stored. In the Tauri app the selected folder receives the SQL export; browser directory selection depends on File System Access API support.

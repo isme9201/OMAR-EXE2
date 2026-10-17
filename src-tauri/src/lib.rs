@@ -30,12 +30,29 @@ fn save_pdf_to_downloads(app: AppHandle, file_name: String, bytes: Vec<u8>, reve
     Ok(path.to_string_lossy().to_string())
 }
 
+#[tauri::command]
+fn write_export_to_directory(directory: String, file_name: String, contents: String) -> Result<String, String> {
+    let folder = Path::new(&directory).canonicalize().map_err(|error| error.to_string())?;
+    if !folder.is_dir() {
+        return Err("المجلد المختار غير متاح".to_string());
+    }
+    let safe_name = Path::new(&file_name)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty() && name.to_lowercase().ends_with(".sql"))
+        .ok_or_else(|| "اسم ملف SQL غير صالح".to_string())?;
+    let path = folder.join(safe_name);
+    fs::write(&path, contents.as_bytes()).map_err(|error| error.to_string())?;
+    Ok(path.to_string_lossy().to_string())
+}
+
 // Editorial Atelier desktop reminder: native chrome should stay quiet and make the production workspace the focus.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![open_downloads_folder, save_pdf_to_downloads])
+        .invoke_handler(tauri::generate_handler![open_downloads_folder, save_pdf_to_downloads, write_export_to_directory])
         .run(tauri::generate_context!())
         .expect("error while running PhotoMedia ERP");
 }

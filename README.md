@@ -58,3 +58,9 @@ Before deploying chat, ensure `supabase/migrations/20260920_avenmedia_collaborat
 WhatsApp, NAS, accounting, and other external integrations still require their own credentials and server-side authorization before live operation. Do not embed service-role keys or Cloudinary secrets in this desktop bundle.
 
 The Settings page can disable future offline-cache/outbox writes and select a folder for SQL exports. The export includes only rows visible to the signed-in user under Supabase RLS; it does not include `auth.users`, service-role secrets, or database DDL/schema. Disabling local saving does not erase device data already stored. In the Tauri app the selected folder receives the SQL export; browser directory selection depends on File System Access API support.
+
+## الرفع والتنزيل في الخلفية
+
+يحفظ رافع العملاء الملفات وتقدمها محلياً ثم يرفعها إلى Cloudinary على أجزاء 6 MiB، مع إعادة المحاولة والاستئناف من آخر جزء مكتمل. الملفات الأكبر من 100 MB تستخدم الرفع المجزّأ المطلوب من Cloudinary. في متصفحات تدعم Background Sync يمكن أن يستمر العمل بعد مغادرة الصفحة؛ في غيرها يُستأنف عند إعادة فتح رابط الرفع. في تطبيق سطح المكتب، زر إغلاق النافذة يخفي Avenmedia إلى صينية النظام ويترك عملية الرفع تعمل؛ اختيار «إنهاء بالكامل» يوقف التطبيق والرفع.
+
+تنزيل المستودع يفتح حوار اختيار مسار في تطبيق Tauri ويكتب ZIP مباشرة إلى الملف المختار. ينزّل تطبيق سطح المكتب الملفات عبر أربع عمليات متوازية وبشكل متدفق، بينما تستخدم الواجهة الويب تنزيلات متوازية مع حد ZIP آمن مقداره 300 MiB. إذا لم يدعم المتصفح منتقي الحفظ، يُستخدم مجلد التنزيل الافتراضي.

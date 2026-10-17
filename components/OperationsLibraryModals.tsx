@@ -6,6 +6,8 @@ import type { AvenmediaTask, Employee, UploadRecord } from '@/lib/avenmedia';
 import { specialtyLabel } from '@/lib/specialties';
 import { shareToChannel } from '@/lib/share-targets';
 import { zipSync } from 'fflate';
+import { invoke, isTauri } from '@tauri-apps/api/core';
+import { save as saveFileDialog } from '@tauri-apps/plugin-dialog';
 
 type ModalProps = { open: boolean; onClose: () => void };
 const formatDate = (value?: string | null) => value ? new Date(value).toLocaleString('ar-IQ', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
@@ -19,6 +21,13 @@ const kindOf = (item: UploadRecord) => {
 };
 const roleText = (person: Employee) => specialtyLabel(person.specialty) || person.role || 'عضو الفريق';
 function downloadOne(item: UploadRecord) { const url = urlOf(item); if (!url) return false; const anchor = document.createElement('a'); anchor.href = url; anchor.download = fileName(item); anchor.target = '_blank'; anchor.rel = 'noreferrer'; document.body.appendChild(anchor); anchor.click(); anchor.remove(); return true; }
+type SaveWritable = { write(data: Blob): Promise<void>; close(): Promise<void>; abort?: () => Promise<void> };
+type SaveHandle = { createWritable(): Promise<SaveWritable> };
+type SavePickerWindow = Window & { showSaveFilePicker?: (options: { suggestedName: string; types: Array<{ description: string; accept: Record<string, string[]> }> }) => Promise<SaveHandle> };
+const REPOSITORY_ZIP_LIMIT = 300 * 1024 * 1024;
+const REPOSITORY_DOWNLOAD_CONCURRENCY = 4;
+const archiveEntryName = (name: string, index: number) => `${String(index + 1).padStart(4, '0')}_${name.replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').trim() || `media-${index + 1}`}`;
+
 
 export function RequestPickerModal({ open, onClose, tasks, onSend }: ModalProps & { tasks: AvenmediaTask[]; onSend: (task: AvenmediaTask) => Promise<void> }) {
   const [query, setQuery] = useState(''); const [selectedId, setSelectedId] = useState(''); const [sending, setSending] = useState(false); const [notice, setNotice] = useState(''); const [error, setError] = useState('');
@@ -40,33 +49,128 @@ export function RepositoryModal({ open, onClose, uploads, employees, onSend }: M
   const downloadAll = async () => {
     const candidates = visible.filter((item) => urlOf(item));
     if (!candidates.length) { setNotice('لا توجد ملفات قابلة للتنزيل.'); return; }
-    setBusy(true); setError(''); setNotice('جارٍ تنزيل الملفات وتجهيز ZIP…');
-    const archiveFiles: Record<string, Uint8Array> = {};
-    let totalBytes = 0; let skipped = 0;
+    setBusy(true); setError(''); setNotice('اختر مكان حفظ ملف ZIP…');
+    const suggestedName = `avenmedia-repository-${new Date().toISOString().slice(0, 10)}.zip`;
+    const entries = candidates.map((item, index) => ({ name: archiveEntryName(fileName(item), index), url: urlOf(item) }));
+    let selectedNativePath: string | null = null;
+    let browserSaveHandle: SaveHandle | null = null;
+    let fallbackDownload = false;
     try {
-      for (const [index, item] of candidates.entries()) {
-        try {
-          const response = await fetch(urlOf(item));
-          if (!response.ok) { skipped += 1; continue; }
+      if (isTauri()) {
+        selectedNativePath = await saveFileDialog({ title: 'اختر مكان تنزيل المستودع', defaultPath: suggestedName, filters: [{ name: 'ZIP archive', extensions: ['zip'] }] });
+        if (!selectedNativePath) { setNotice('تم إلغاء تنزيل المستودع.'); return; }
+        setNotice('جارٍ تنزيل ملفات المستودع بالتوازي وتجهيز ZIP في المجلد المختار…');
+        const savedPath = await invoke<string>('download_repository_zip', { filePath: selectedNativePath, entries });
+        setNotice(`تم حفظ ZIP في: ${savedPath}`);
+        return;
+      }
+
+      const pickerWindow = window as SavePickerWindow;
+      if (pickerWindow.showSaveFilePicker) {
+        browserSaveHandle = await pickerWindow.showSaveFilePicker({
+          suggestedName,
+          types: [{ description: 'ZIP archive', accept: { 'application/zip': ['.zip'] } }],
+        });
+      } else {
+        fallbackDownload = true;
+        setNotice('هذا المتصفح لا يتيح اختيار مكان الحفظ؛ سيُنزّل الملف إلى مجلد التنزيلات الافتراضي.');
+      }
+
+      const archiveFiles: Record<string, Uint8Array> = {};
+      let totalBytes = 0;
+      let activeBytes = 0;
+      let skipped = 0;
+      let cursor = 0;
+      let completed = 0;
+      let limitError: Error | null = null;
+      const controller = new AbortController();
+      const buffers: Array<Uint8Array | null> = candidates.map(() => null);
+
+      const readLimited = async (response: Response) => {
+        if (!response.body) {
           const buffer = await response.arrayBuffer();
+          if (totalBytes + activeBytes + buffer.byteLength > REPOSITORY_ZIP_LIMIT) throw new Error('تجاوزت ملفات المستودع حد ZIP البالغ 300 ميغابايت؛ نزّل الملفات على دفعات.');
           totalBytes += buffer.byteLength;
-          if (totalBytes > 300 * 1024 * 1024) throw new Error('حجم المستودع تجاوز حد ZIP الآمن البالغ 300 ميغابايت؛ نزّل الملفات على دفعات.');
-          const safeName = fileName(item).replace(/[\\/:*?"<>|]/g, '_');
-          archiveFiles[`Avenmedia/${String(index + 1).padStart(4, '0')}_${safeName}`] = new Uint8Array(buffer);
-        } catch (cause) {
-          if (cause instanceof Error && cause.message.includes('300 ميغابايت')) throw cause;
-          skipped += 1;
+          return new Uint8Array(buffer);
         }
+        const reader = response.body.getReader();
+        const parts: Uint8Array[] = [];
+        let length = 0;
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            length += value.byteLength;
+            activeBytes += value.byteLength;
+            if (totalBytes + activeBytes > REPOSITORY_ZIP_LIMIT) {
+              activeBytes -= value.byteLength;
+              length -= value.byteLength;
+              await reader.cancel();
+              throw new Error('تجاوزت ملفات المستودع حد ZIP البالغ 300 ميغابايت؛ نزّل الملفات على دفعات.');
+            }
+            parts.push(value);
+          }
+        } catch (cause) {
+          activeBytes -= length;
+          throw cause;
+        }
+        activeBytes -= length;
+        totalBytes += length;
+        const joined = new Uint8Array(length);
+        let offset = 0;
+        for (const part of parts) { joined.set(part, offset); offset += part.byteLength; }
+        return joined;
+      };
+
+      const worker = async () => {
+        while (!controller.signal.aborted) {
+          const index = cursor++;
+          if (index >= candidates.length) return;
+          try {
+            const response = await fetch(entries[index].url, { signal: controller.signal });
+            if (!response.ok) { skipped += 1; continue; }
+            buffers[index] = await readLimited(response);
+          } catch (cause) {
+            if (cause instanceof Error && cause.message.includes('300 ميغابايت')) {
+              limitError = cause;
+              controller.abort();
+              return;
+            }
+            if (controller.signal.aborted) return;
+            skipped += 1;
+          } finally {
+            if (!controller.signal.aborted) {
+              completed += 1;
+              setNotice(`جارٍ تنزيل المستودع بالتوازي: ${completed}/${candidates.length} ملف…`);
+            }
+          }
+        }
+      };
+
+      await Promise.all(Array.from({ length: Math.min(REPOSITORY_DOWNLOAD_CONCURRENCY, candidates.length) }, () => worker()));
+      if (limitError) throw limitError;
+      for (let index = 0; index < buffers.length; index += 1) {
+        const bytes = buffers[index];
+        if (bytes) archiveFiles[`Avenmedia/${entries[index].name}`] = bytes;
       }
       if (!Object.keys(archiveFiles).length) throw new Error('تعذر تنزيل الملفات من مستودع التخزين؛ تحقق من الاتصال وصلاحية الروابط.');
-      const archive = zipSync(archiveFiles, { level: 5 });
+      const archive = zipSync(archiveFiles, { level: 0 });
       const blob = new Blob([archive.buffer.slice(archive.byteOffset, archive.byteOffset + archive.byteLength) as ArrayBuffer], { type: 'application/zip' });
-      const objectUrl = URL.createObjectURL(blob); const anchor = document.createElement('a');
-      anchor.href = objectUrl; anchor.download = `avenmedia-repository-${new Date().toISOString().slice(0, 10)}.zip`; anchor.click();
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-      setNotice(`تم تنزيل ZIP يضم ${Object.keys(archiveFiles).length} ملفاً.${skipped ? ` تعذر تضمين ${skipped} ملف(ات).` : ''}`);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'تعذر تجهيز ZIP للمستودع.'); }
-    finally { setBusy(false); }
+      if (browserSaveHandle) {
+        const writable = await browserSaveHandle.createWritable();
+        try { await writable.write(blob); await writable.close(); }
+        catch (cause) { await writable.abort?.(); throw cause; }
+      } else {
+        const objectUrl = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = objectUrl; anchor.download = suggestedName; anchor.click();
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+      }
+      setNotice(`${browserSaveHandle ? 'تم حفظ' : 'تم تنزيل'} ZIP يضم ${Object.keys(archiveFiles).length} ملفاً.${skipped ? ` تعذر تضمين ${skipped} ملف(ات).` : ''}${fallbackDownload ? ' افتح مجلد التنزيلات في المتصفح.' : ''}`);
+    } catch (cause) {
+      if (cause instanceof Error && cause.name === 'AbortError') setNotice('تم إلغاء تنزيل المستودع.');
+      else setError(cause instanceof Error ? cause.message : 'تعذر تجهيز ZIP للمستودع.');
+    } finally { setBusy(false); }
   };
   const shareAll = async (channel: 'whatsapp' | 'telegram' | 'instagram') => {
     const urls = visible.map(urlOf).filter(Boolean);

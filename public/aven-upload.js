@@ -20,8 +20,11 @@
   const blocked = $('blocked');
   const jobs = [];
   const runners = new Set();
+  const MAX_FOREGROUND_RUNNERS = 2;
   let dbPromise;
   let serviceWorkerPromise;
+  let pendingRunPromise = null;
+  let runPendingRequested = false;
 
   function openDb() {
     if (!('indexedDB' in window)) return Promise.reject(new Error('هذا المتصفح لا يتيح تخزين الرفع للاستئناف. استخدم Chrome أو Edge حديثاً.'));
@@ -264,29 +267,39 @@
 
   async function addFiles(list) {
     let added = 0;
+    const rejected = [];
     for (const file of list) {
       if (!file || file.size <= 0) { show('الملف فارغ أو غير صالح.', 'err'); continue; }
       if (jobs.some((job) => job.fileName === file.name && job.size === file.size && job.status !== 'done')) { show(`الملف موجود في القائمة: ${file.name}`, 'info'); continue; }
-      jobs.push({
+      const job = {
         id: crypto.randomUUID(), uploadId: `aven-${crypto.randomUUID()}`,
         file, fileName: file.name, fileType: file.type || 'application/octet-stream', size: file.size,
         token, supabaseUrl: SUPABASE_URL, supabaseAnonKey: SUPABASE_ANON_KEY,
         nextOffset: 0, status: 'queued', error: '', asset: null, createdAt: Date.now(), updatedAt: Date.now(),
-      });
-      added++;
+      };
+      try {
+        // Persist the Blob before showing the item, so a successful selection is always resumable.
+        await persistAndQueue(job, false);
+        jobs.push(job);
+        added++;
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : 'رفض المتصفح حفظ الملف في التخزين المحلي';
+        rejected.push(`${file.name}: ${reason}`);
+      }
     }
     draw();
-    if (added) show(`تمت إضافة ${added} ملف. سيُحفظ محلياً قبل بدء الرفع المجزّأ.`, 'ok');
+    if (added) show(`تمت إضافة ${added} ملف وحفظه محلياً قبل بدء الرفع المجزّأ.`, 'ok');
+    if (rejected.length) show(`تعذر حفظ الملف محلياً، لذلك لم تتم إضافته إلى القائمة:\n${rejected.join('\n')}`, 'err');
   }
 
-  async function persistAndQueue(job) {
+  async function persistAndQueue(job, schedule = true) {
     if (navigator.storage && typeof navigator.storage.persist === 'function') {
       try { await navigator.storage.persist(); } catch { /* browser may decline persistent-storage permission */ }
     }
     const saved = await readJob(job.id);
     if (saved) Object.assign(job, saved);
     else await putJob(job);
-    await scheduleInBackground(job.id);
+    if (schedule) await scheduleInBackground(job.id);
   }
 
   async function finishJob(job, workerJob) {
@@ -381,14 +394,36 @@
     }
   }
 
-  async function runPending() {
-    if (runners.size) return;
-    const pending = jobs.filter((job) => job.status !== 'done' && job.status !== 'blocked');
-    if (!pending.length) return;
-    startButton.disabled = true;
-    for (const job of pending) await runJob(job);
-    draw();
-    if (jobs.every((job) => job.status === 'done')) show('اكتمل رفع كل الملفات بنجاح.', 'ok');
+  async function drainPending() {
+    const started = new Map();
+    while (true) {
+      const capacity = Math.max(0, MAX_FOREGROUND_RUNNERS - runners.size);
+      const pending = jobs.filter((job) => job.status !== 'done' && job.status !== 'blocked' && !runners.has(job.id)).slice(0, capacity);
+      if (!pending.length) break;
+      for (const job of pending) started.set(job.id, { status: job.status, offset: Number(job.nextOffset || 0) });
+      await Promise.all(pending.map((job) => runJob(job)));
+      draw();
+      const madeProgress = pending.some((job) => job.status === 'done' || job.status === 'blocked' || Number(job.nextOffset || 0) > (started.get(job.id)?.offset || 0));
+      if (!madeProgress) break;
+    }
+    if (jobs.length && jobs.every((job) => job.status === 'done')) show('اكتمل رفع كل الملفات بنجاح.', 'ok');
+  }
+
+  function runPending() {
+    runPendingRequested = true;
+    if (pendingRunPromise) return pendingRunPromise;
+    pendingRunPromise = (async () => {
+      while (runPendingRequested) {
+        runPendingRequested = false;
+        startButton.disabled = true;
+        await drainPending();
+      }
+    })().finally(() => {
+      pendingRunPromise = null;
+      if (runPendingRequested) void runPending();
+      draw();
+    });
+    return pendingRunPromise;
   }
 
   async function loadSavedJobs() {

@@ -3,7 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 const sha1 = async (value: string) => Array.from(new Uint8Array(await crypto.subtle.digest("SHA-1", new TextEncoder().encode(value)))).map((byte) => byte.toString(16).padStart(2, "0")).join("");
-const allowedRoles = ["admin", "manager", "designer", "indoor", "flex_printing", "flex_workshop", "laser", "acrylic"];
+const allowedRoles = ["admin", "manager", "designer", "photographer", "editor", "social_media", "accountant", "hr", "indoor", "flex_printing", "flex_workshop", "laser", "acrylic", "employee"];
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -31,6 +31,79 @@ Deno.serve(async (request) => {
     const { data: profile } = await adminClient.from("profiles").select("id,role,is_active").eq("id", callerId).maybeSingle();
     const role = profile?.role?.trim().toLowerCase();
     if (!profile || profile.is_active === false || !role || (!allowedRoles.includes(role) && role !== "employee")) return json({ error: "Your account is not allowed to use Avenmedia chat" }, 403);
+  }
+
+  const chatMember = async (conversationId: string) => {
+    if (!callerId || !conversationId) return false;
+    const { data } = await adminClient.from("conversation_members").select("user_id,blocked_at").eq("conversation_id", conversationId);
+    return Boolean(data?.some((member) => member.user_id === callerId && !member.blocked_at) && !data?.some((member) => member.user_id !== callerId && member.blocked_at));
+  };
+
+  if (action === "sign_chat_upload") {
+    const conversationId = String(payload?.conversationId ?? "");
+    const clientMessageId = String(payload?.clientMessageId ?? "");
+    const resourceType = String(payload?.resourceType ?? "raw");
+    if (!conversationId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(clientMessageId) || !["image", "video", "raw"].includes(resourceType)) return json({ error: "Invalid chat upload request" }, 400);
+    if (!(await chatMember(conversationId))) return json({ error: "Conversation membership required" }, 403);
+    const timestamp = Math.floor(Date.now() / 1000);
+    const folder = `avenmedia/chat/${conversationId}`;
+    const publicId = clientMessageId;
+    const signature = await sha1(`folder=${folder}&public_id=${publicId}&timestamp=${timestamp}${apiSecret}`);
+    return json({ cloudName, apiKey, timestamp, signature, folder, publicId, resourceType });
+  }
+
+  if (action === "complete_chat_upload") {
+    const conversationId = String(payload?.conversationId ?? "");
+    const clientMessageId = String(payload?.clientMessageId ?? "");
+    const messageType = String(payload?.messageType ?? "file");
+    const body = String(payload?.body ?? "").trim().slice(0, 5000);
+    const replyToMessageId = typeof payload?.replyToMessageId === "string" ? payload.replyToMessageId : null;
+    const asset = (payload?.asset ?? {}) as Record<string, unknown>;
+    if (!(await chatMember(conversationId))) return json({ error: "Conversation membership required" }, 403);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(clientMessageId) || !["text", "image", "video", "pdf", "file", "voice"].includes(messageType)) return json({ error: "Invalid chat message" }, 400);
+    const secureUrl = String(asset.secure_url ?? "");
+    const allowedResource = messageType === "image" ? "image" : messageType === "video" ? "video" : "raw";
+    const folder = `avenmedia/chat/${conversationId}`;
+    const expectedPublicId = `${folder}/${clientMessageId}`;
+    const publicId = String(asset.public_id ?? "");
+    if (publicId !== expectedPublicId && !publicId.startsWith(`${expectedPublicId}.`)) return json({ error: "Attachment public id does not match the signed conversation upload" }, 400);
+    let assetUrl: URL;
+    let decodedPath: string;
+    try { assetUrl = new URL(secureUrl); decodedPath = decodeURIComponent(assetUrl.pathname); }
+    catch { return json({ error: "Cloudinary did not return a valid secure asset URL" }, 400); }
+    const pathPrefix = `/${cloudName}/${allowedResource}/upload/`;
+    if (assetUrl.protocol !== "https:" || assetUrl.hostname !== "res.cloudinary.com" || !decodedPath.startsWith(pathPrefix) || !decodedPath.includes(`/${publicId}`)) return json({ error: "Attachment URL does not match the signed Cloudinary asset" }, 400);
+    if (String(asset.resource_type ?? "") !== allowedResource) return json({ error: "Attachment resource type mismatch" }, 400);
+    const sizeBytes = Number(asset.bytes ?? 0);
+    if (!Number.isSafeInteger(sizeBytes) || sizeBytes <= 0) return json({ error: "Attachment size is invalid" }, 400);
+    if (replyToMessageId) {
+      const { data: reply } = await adminClient.from("conversation_messages").select("id").eq("id", replyToMessageId).eq("conversation_id", conversationId).maybeSingle();
+      if (!reply) return json({ error: "Reply target is not in this conversation" }, 400);
+    }
+    const { data: duplicate } = await adminClient.from("conversation_messages").select("*").eq("sender_id", callerId).eq("conversation_id", conversationId).eq("client_message_id", clientMessageId).maybeSingle();
+    if (duplicate) return json({ message: duplicate, duplicate: true });
+    const { data: message, error } = await adminClient.from("conversation_messages").insert({
+      conversation_id: conversationId, sender_id: callerId, body, message_type: messageType,
+      attachment_url: secureUrl, attachment_public_id: String(asset.public_id ?? "").slice(0, 500) || null,
+      attachment_name: String(asset.original_filename ?? "مرفق").slice(0, 255),
+      attachment_mime_type: String(asset.mime_type ?? "application/octet-stream").slice(0, 160),
+      attachment_size_bytes: sizeBytes, attachment_resource_type: allowedResource,
+      attachment_format: String(asset.format ?? "").slice(0, 80) || null, attachment_duration_seconds: Number(asset.duration_seconds ?? 0) || null,
+      client_message_id: clientMessageId, reply_to_message_id: replyToMessageId,
+    }).select("*").single();
+    if (error || !message) return json({ error: error?.message ?? "Message creation failed" }, 400);
+    return json({ message }, 201);
+  }
+
+  if (action === "revoke_link") {
+    const linkId = String(payload?.linkId ?? "");
+    if (!linkId) return json({ error: "Link id is required" }, 400);
+    const { data: link } = await adminClient.from("task_upload_links").select("id,created_by").eq("id", linkId).maybeSingle();
+    const { data: actor } = await adminClient.from("profiles").select("role").eq("id", callerId).maybeSingle();
+    const actorRole = String(actor?.role ?? "").trim().toLowerCase();
+    if (!link || (link.created_by !== callerId && !["admin", "manager"].includes(actorRole))) return json({ error: "Not allowed to revoke this link" }, 403);
+    const { error } = await adminClient.from("task_upload_links").update({ revoked_at: new Date().toISOString() }).eq("id", linkId);
+    return json(error ? { error: error.message } : { ok: true }, error ? 400 : 200);
   }
 
   if (action === "create_chat_message") {
@@ -65,7 +138,8 @@ Deno.serve(async (request) => {
     const requestedHours = Number(payload?.ttlHours ?? 48);
     const ttlHours = Number.isFinite(requestedHours) ? Math.max(1, Math.min(168, Math.round(requestedHours))) : 48;
     const expiresAt = new Date(Date.now() + ttlHours * 60 * 60 * 1000).toISOString();
-    const { data: link, error } = await adminClient.from("task_upload_links").insert({ token, task_id: typeof payload?.taskId === "string" ? payload.taskId : null, client_name: typeof payload?.clientName === "string" ? payload.clientName : null, expires_at: expiresAt, created_by: callerId }).select("id,token,task_id,client_name,expires_at").single();
+    const clientName = typeof payload?.clientName === "string" ? payload.clientName.trim().slice(0, 160) || null : null;
+    const { data: link, error } = await adminClient.from("task_upload_links").insert({ token, task_id: typeof payload?.taskId === "string" ? payload.taskId : null, client_name: clientName, expires_at: expiresAt, created_by: callerId }).select("id,token,task_id,client_name,expires_at,created_at").single();
     if (error) return json({ error: error.message }, 400);
     return json({ link }, 201);
   }

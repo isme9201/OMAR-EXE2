@@ -1,0 +1,126 @@
+'use client';
+
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Check, Clipboard, ExternalLink, Link2, Loader2, RefreshCw, Share2, ShieldAlert, X } from 'lucide-react';
+import { getUploadLinkStatus, type UploadLinkStatus } from '@/lib/avenmedia-policy';
+import { createUploadLink, listUploadLinks, revokeUploadLink, uploadLinkUrl, type UploadLink } from '@/lib/avenmedia';
+
+type TaskOption = { id: string; label: string };
+type LinkStatus = UploadLinkStatus;
+
+const expiryOptions = [
+  { value: 24, label: '24 ساعة' },
+  { value: 48, label: '48 ساعة' },
+  { value: 72, label: '3 أيام' },
+  { value: 168, label: '7 أيام' },
+];
+
+const dateTime = (value?: string | null) => value ? new Date(value).toLocaleString('ar-IQ', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
+const statusFor = getUploadLinkStatus;
+const statusLabel: Record<LinkStatus, string> = { active: 'فعال', expired: 'منتهي', revoked: 'ملغى' };
+const statusTone: Record<LinkStatus, string> = { active: 'bg-[#e6ebff] text-[#142c9b]', expired: 'bg-[#fff1df] text-[#8a531d]', revoked: 'bg-[#f7e6e6] text-[#9b3434]' };
+
+export function UploadLinkModal({ open, onClose, tasks = [] }: { open: boolean; onClose: () => void; tasks?: TaskOption[] }) {
+  const [clientName, setClientName] = useState('');
+  const [taskId, setTaskId] = useState('');
+  const [ttlHours, setTtlHours] = useState(24);
+  const [history, setHistory] = useState<UploadLink[]>([]);
+  const [created, setCreated] = useState<UploadLink | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [revokingId, setRevokingId] = useState('');
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const firstField = useRef<HTMLInputElement>(null);
+
+  const loadHistory = async () => {
+    setHistoryLoading(true);
+    const result = await listUploadLinks();
+    if (result.data) setHistory(result.data);
+    if (result.error) setError(result.error);
+    setHistoryLoading(false);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    setCreated(null);
+    setError('');
+    setNotice('');
+    void loadHistory();
+    const timer = window.setTimeout(() => firstField.current?.focus(), 0);
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKeyDown);
+    document.body.style.overflow = 'hidden';
+    return () => { window.clearTimeout(timer); window.removeEventListener('keydown', onKeyDown); document.body.style.overflow = ''; };
+  }, [open]);
+
+  const activeCount = useMemo(() => history.filter((link) => statusFor(link) === 'active').length, [history]);
+  if (!open) return null;
+
+  const copy = async (url: string) => {
+    try { await navigator.clipboard.writeText(url); setNotice('تم نسخ رابط الرفع.'); }
+    catch { setNotice('تعذر النسخ التلقائي؛ حدّد الرابط وانسخه يدوياً.'); }
+  };
+  const share = async (url: string) => {
+    if (navigator.share) {
+      try { await navigator.share({ title: 'رابط رفع Avenmedia', text: 'رابط رفع الملفات', url }); setNotice('تم فتح نافذة المشاركة.'); return; } catch { /* cancelled or unavailable */ }
+    }
+    await copy(url);
+  };
+  const shareTo = async (url: string, network: 'whatsapp' | 'telegram' | 'instagram') => {
+    if (network === 'instagram') {
+      try { await navigator.clipboard.writeText(url); }
+      catch { setError('تعذر نسخ الرابط. انسخه يدوياً قبل فتح Instagram.'); return; }
+      window.open('https://www.instagram.com/', '_blank', 'noopener,noreferrer');
+      setNotice('تم نسخ الرابط. الصقه يدوياً في Instagram.');
+      return;
+    }
+    const target = network === 'whatsapp'
+      ? `https://wa.me/?text=${encodeURIComponent(`رابط رفع الملفات: ${url}`)}`
+      : `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent('رابط رفع الملفات')}`;
+    window.open(target, '_blank', 'noopener,noreferrer');
+    setNotice(network === 'whatsapp' ? 'تم فتح مشاركة WhatsApp.' : 'تم فتح مشاركة Telegram.');
+  };
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setLoading(true); setError(''); setNotice('');
+    const result = await createUploadLink({ clientName: clientName.trim() || undefined, taskId: taskId || undefined, ttlHours });
+    if (result.error || !result.data) { setError(result.error || 'تعذر إنشاء رابط الرفع.'); setLoading(false); return; }
+    setCreated(result.data);
+    setHistory((current) => [result.data!, ...current.filter((link) => link.id !== result.data!.id)]);
+    setNotice('الرابط جاهز — انسخه أو أرسله للعميل.');
+    setLoading(false);
+  };
+  const revoke = async (link: UploadLink) => {
+    if (statusFor(link) !== 'active' || !window.confirm(`إلغاء رابط ${link.client_name || 'العميل'}؟ لن يعود صالحاً للرفع.`)) return;
+    setRevokingId(link.id); setError('');
+    const result = await revokeUploadLink(link.id);
+    if (result.error) setError(result.error);
+    else { setHistory((current) => current.map((item) => item.id === link.id ? { ...item, revoked_at: new Date().toISOString() } : item)); setCreated((current) => current?.id === link.id ? { ...current, revoked_at: new Date().toISOString() } : current); setNotice('تم إلغاء الرابط بأمان.'); }
+    setRevokingId('');
+  };
+  const renderActions = (link: UploadLink) => {
+    const url = uploadLinkUrl(link.token);
+    const valid = statusFor(link) === 'active';
+    return <div className="mt-3 flex flex-wrap gap-2">
+      <button type="button" disabled={!valid} onClick={() => void copy(url)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#142c9b] px-3 py-2 text-[11px] font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-40"><Clipboard className="h-3.5" />نسخ الرابط</button>
+      <button type="button" disabled={!valid} onClick={() => void share(url)} className="inline-flex items-center gap-1.5 rounded-lg border border-[#cbd4f5] bg-white px-3 py-2 text-[11px] font-extrabold text-[#142c9b] disabled:cursor-not-allowed disabled:opacity-40"><Share2 className="h-3.5" />مشاركة</button>
+      <button type="button" disabled={!valid} onClick={() => void shareTo(url, 'whatsapp')} className="rounded-lg border border-[#cbd4f5] bg-white px-3 py-2 text-[11px] font-extrabold text-[#142c9b] disabled:cursor-not-allowed disabled:opacity-40">WhatsApp</button>
+      <button type="button" disabled={!valid} onClick={() => void shareTo(url, 'telegram')} className="rounded-lg border border-[#cbd4f5] bg-white px-3 py-2 text-[11px] font-extrabold text-[#142c9b] disabled:cursor-not-allowed disabled:opacity-40">Telegram</button>
+      <button type="button" disabled={!valid} onClick={() => void shareTo(url, 'instagram')} className="rounded-lg border border-[#cbd4f5] bg-white px-3 py-2 text-[11px] font-extrabold text-[#142c9b] disabled:cursor-not-allowed disabled:opacity-40">Instagram</button>
+      {valid && <button type="button" disabled={revokingId === link.id} onClick={() => void revoke(link)} className="inline-flex items-center gap-1.5 rounded-lg border border-[#e4b9b9] bg-white px-3 py-2 text-[11px] font-extrabold text-[#9b3434] disabled:opacity-50">{revokingId === link.id ? <Loader2 className="h-3.5 animate-spin" /> : <ShieldAlert className="h-3.5" />}إلغاء الرابط</button>}
+    </div>;
+  };
+
+  return <div className="fixed inset-0 z-[70] grid place-items-center bg-[#080d24]/65 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section role="dialog" aria-modal="true" aria-labelledby="upload-link-modal-title" aria-describedby="upload-link-modal-description" dir="rtl" className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-[24px] bg-white p-5 text-[#080d24] shadow-2xl sm:p-6">
+      <header className="flex items-start justify-between gap-4"><div><span className="font-mono text-[10px] tracking-[.16em] text-[#58617e]">UPLOAD LINK / AVENMEDIA</span><h2 id="upload-link-modal-title" className="mt-1 text-2xl font-black">رابط رفع للعميل</h2><p id="upload-link-modal-description" className="mt-2 text-xs leading-6 text-[#58617e]">أنشئ رابطاً آمناً باسم العميل، وحدد مدة صلاحيته، ثم انسخه أو شاركه.</p></div><button type="button" onClick={onClose} aria-label="إغلاق نافذة رابط الرفع" className="rounded-full p-2 text-[#58617e] hover:bg-[#e6ebff]"><X className="h-5" /></button></header>
+      <form onSubmit={submit} className="mt-5 grid gap-3 rounded-2xl border border-[#cbd4f5] bg-[#f7f9ff] p-4 md:grid-cols-[1.2fr_1fr_.8fr_auto] md:items-end"><label className="grid gap-1.5 text-xs font-bold text-[#58617e]"><span>اسم العميل (اختياري)</span><input ref={firstField} value={clientName} onChange={(event) => setClientName(event.target.value)} placeholder="مثال: شركة النور" className="h-11 rounded-xl border border-[#cbd4f5] bg-white px-3 text-sm outline-none focus:border-[#142c9b]" /></label><label className="grid gap-1.5 text-xs font-bold text-[#58617e]"><span>المهمة (اختياري)</span>{tasks.length ? <select value={taskId} onChange={(event) => setTaskId(event.target.value)} className="h-11 rounded-xl border border-[#cbd4f5] bg-white px-3 text-sm outline-none focus:border-[#142c9b]"><option value="">بدون مهمة</option>{tasks.map((task) => <option key={task.id} value={task.id}>{task.label}</option>)}</select> : <input value={taskId} onChange={(event) => setTaskId(event.target.value)} placeholder="معرّف المهمة (اختياري)" className="h-11 rounded-xl border border-[#cbd4f5] bg-white px-3 text-sm outline-none focus:border-[#142c9b]" />}</label><label className="grid gap-1.5 text-xs font-bold text-[#58617e]"><span>مدة الصلاحية</span><select value={ttlHours} onChange={(event) => setTtlHours(Number(event.target.value))} className="h-11 rounded-xl border border-[#cbd4f5] bg-white px-3 text-sm outline-none focus:border-[#142c9b]">{expiryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><button type="submit" disabled={loading} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#142c9b] px-4 text-xs font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50">{loading ? <Loader2 className="h-4 animate-spin" /> : <Link2 className="h-4" />}إنشاء الرابط</button></form>
+      {(error || notice) && <div role={error ? 'alert' : 'status'} className={`mt-3 rounded-xl p-3 text-xs font-bold ${error ? 'bg-[#f7e6e6] text-[#9b3434]' : 'bg-[#e6ebff] text-[#142c9b]'}`}>{error || notice}</div>}
+      {created && <article className="mt-4 rounded-2xl border-2 border-[#3159d8] bg-[#f0f5ff] p-4"><div className="flex items-center gap-2 text-xs font-extrabold text-[#142c9b]"><Check className="h-4" />الرابط جاهز — انسخه أو أرسله للعميل</div><p dir="ltr" className="mt-3 break-all rounded-xl bg-white p-3 font-mono text-xs text-[#142c9b]">{uploadLinkUrl(created.token)}</p><p className="mt-2 text-[11px] text-[#58617e]">ينتهي: {dateTime(created.expires_at)}</p>{renderActions(created)}</article>}
+      <div className="mt-6 flex items-end justify-between gap-3 border-b border-[#dfe5fb] pb-3"><div><span className="font-mono text-[10px] tracking-[.16em] text-[#58617e]">LINK HISTORY</span><h3 className="mt-1 text-lg font-extrabold">سجل الروابط السابقة</h3></div><button type="button" onClick={() => void loadHistory()} disabled={historyLoading} className="inline-flex items-center gap-1.5 rounded-lg border border-[#cbd4f5] px-3 py-2 text-[11px] font-bold text-[#142c9b] disabled:opacity-50">{historyLoading ? <Loader2 className="h-3.5 animate-spin" /> : <RefreshCw className="h-3.5" />}تحديث ({activeCount} فعال)</button></div>
+      <div className="mt-3 space-y-2">{history.length ? history.map((link) => { const state = statusFor(link); return <article key={link.id} className="rounded-xl border border-[#dfe5fb] bg-[#f7f9ff] p-3"><div className="flex flex-wrap items-start justify-between gap-2"><div><strong className="text-xs">{link.client_name || 'بدون اسم عميل'}</strong>{link.task_id && <span className="mr-2 text-[10px] text-[#58617e]">· المهمة {link.task_id}</span>}<p className="mt-1 text-[10px] leading-5 text-[#58617e]">أنشئ: {dateTime(link.created_at)} · ينتهي: {dateTime(link.expires_at)}</p></div><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${statusTone[state]}`}>{statusLabel[state]}</span></div><p dir="ltr" className={`mt-2 break-all font-mono text-[10px] ${state === 'active' ? 'text-[#3159d8]' : 'text-[#58617e] line-through opacity-70'}`}>{uploadLinkUrl(link.token)}</p>{renderActions(link)}</article>; }) : <p className="rounded-xl border border-dashed border-[#cbd4f5] p-6 text-center text-xs text-[#58617e]">لا يوجد سجل روابط بعد.</p>}</div>
+      <footer className="mt-4 flex items-center gap-2 text-[10px] text-[#58617e]"><ExternalLink className="h-3.5" />تبقى الروابط السابقة ظاهرة للتدقيق، ولا يمكن نسخ أو مشاركة الرابط بعد انتهائه أو إلغائه.</footer>
+    </section>
+  </div>;
+}

@@ -5,7 +5,9 @@ import { normalizeSpecialty } from '@/lib/specialties';
 
 export type Employee = { id: string; name: string; email: string; role: string; specialty?: string | null; is_active?: boolean };
 export type UploadStatus = 'new' | 'viewed' | 'in_progress' | 'delivered' | 'needs_reupload';
-export type UploadRecord = { id: string; upload_link_id?: string | null; file_name?: string | null; client_name?: string | null; file_url?: string | null; public_url?: string | null; secure_url?: string | null; created_at?: string | null; uploaded_at?: string | null; task_id?: string | null; bytes?: number | null; format?: string | null; resource_type?: string | null; status?: UploadStatus | null; note?: string | null; viewed_at?: string | null; viewed_by?: string | null };
+export type UploadLink = { id: string; token: string; task_id?: string | null; client_name?: string | null; expires_at: string; revoked_at?: string | null; created_at?: string | null };
+export type UploadLinkMetadata = Pick<UploadLink, 'id' | 'task_id' | 'client_name' | 'expires_at' | 'revoked_at' | 'created_at'>;
+export type UploadRecord = { id: string; upload_link_id?: string | null; upload_link?: UploadLinkMetadata | null; file_name?: string | null; client_name?: string | null; file_url?: string | null; public_url?: string | null; secure_url?: string | null; created_at?: string | null; uploaded_at?: string | null; task_id?: string | null; bytes?: number | null; format?: string | null; resource_type?: string | null; status?: UploadStatus | null; note?: string | null; viewed_at?: string | null; viewed_by?: string | null };
 export type AvenmediaTask = { id: string; title: string; task_type: string; client_name?: string | null; client_phone?: string | null; description?: string | null; status: string; priority: string; due_at?: string | null; created_at?: string; assignments?: Employee[] };
 export type AvenmediaAccount = { id: string; name: string; account_type: string; opening_balance: number; is_active: boolean };
 export type AvenmediaTransaction = { id: string; account_id: string; direction: 'income' | 'expense'; amount: number; category: string; description: string; transaction_date: string; created_at?: string };
@@ -43,8 +45,13 @@ export async function listEmployees(): Promise<Result<Employee[]>> {
 
 export async function listUploadRecords(): Promise<Result<UploadRecord[]>> {
   const db = client(); if (!db) return empty([], 'Supabase is not configured');
-  const { data, error } = await db.from('client_uploads').select('id,upload_link_id,file_name,client_name,file_url,secure_url,created_at,uploaded_at,task_id,bytes,format,resource_type,status,note,viewed_at,viewed_by').order('uploaded_at', { ascending: false });
-  return empty(((data ?? []) as UploadRecord[]).map((item) => ({ ...item, public_url: item.secure_url || item.file_url || null })), error?.message ?? '');
+  const { data, error } = await db.from('client_uploads').select('id,upload_link_id,file_name,client_name,file_url,secure_url,created_at,uploaded_at,task_id,bytes,format,resource_type,status,note,viewed_at,viewed_by,upload_link:task_upload_links(id,task_id,client_name,expires_at,revoked_at,created_at)').order('uploaded_at', { ascending: false });
+  const records = (data ?? []).map((item) => {
+    const raw = item as unknown as UploadRecord & { upload_link?: UploadLinkMetadata | UploadLinkMetadata[] | null };
+    const link = Array.isArray(raw.upload_link) ? raw.upload_link[0] ?? null : raw.upload_link ?? null;
+    return { ...raw, upload_link: link, public_url: raw.secure_url || raw.file_url || null };
+  });
+  return empty(records, error?.message ?? '');
 }
 
 export async function updateUploadRecord(id: string, input: Pick<UploadRecord, 'status' | 'note'>) {
@@ -106,6 +113,24 @@ export async function createAvenmediaTransaction(input: Omit<AvenmediaTransactio
   const { data: auth } = await db.auth.getSession();
   const { data, error } = await db.from('avenmedia_transactions').insert({ ...input, created_by: auth.session?.user.id }).select('*').single();
   return empty((data ?? null) as AvenmediaTransaction | null, error?.message ?? '');
+}
+
+export const uploadLinkUrl = (token: string) => `https://avenmedia.pages.dev/aven-upload.html?token=${encodeURIComponent(token)}`;
+
+export async function listUploadLinks(): Promise<Result<UploadLink[]>> {
+  const result = await invokeAvenmediaFunction<{ links?: UploadLink[] }>('cloudinary-upload', { action: 'list_links' });
+  return empty(result.data?.links ?? [], result.error);
+}
+
+export async function createUploadLink(input: { clientName?: string; taskId?: string; ttlHours: number }): Promise<Result<UploadLink | null>> {
+  const result = await invokeAvenmediaFunction<{ link?: UploadLink }>('cloudinary-upload', { action: 'create_link', ...input });
+  const link = result.data?.link;
+  return empty(link ? { ...link, created_at: link.created_at ?? new Date().toISOString() } : null, result.error);
+}
+
+export async function revokeUploadLink(linkId: string): Promise<Result<null>> {
+  const result = await invokeAvenmediaFunction<{ link?: UploadLink }>('cloudinary-upload', { action: 'revoke_link', linkId });
+  return empty(null, result.error);
 }
 
 export async function invokeAvenmediaFunction<T>(name: string, body: unknown): Promise<Result<T | null>> {

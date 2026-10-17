@@ -5,7 +5,8 @@ import { Check, CircleAlert, Copy, Download, Eye, FileImage, FileText, FileVideo
 import { getSupabaseBrowserClient } from '@/lib/supabase-browser';
 import { createUploadLink, invokeAvenmediaFunction } from '@/lib/avenmedia';
 import { listUploadRecords, updateUploadRecord, type UploadLinkMetadata, type UploadRecord, type UploadStatus } from '@/lib/avenmedia';
-import { shareToChannel } from '@/lib/share-targets';
+import { openDownloadUrl, shareToChannel } from '@/lib/share-targets';
+import { cloudinaryAttachmentDownloadUrl } from '@/lib/cloudinary-download';
 
 const statuses: Array<{ value: 'all' | UploadStatus; label: string }> = [
   { value: 'all', label: 'كل الحالات' }, { value: 'new', label: 'جديد' },
@@ -77,6 +78,7 @@ export function UploadRoom() {
   const [preview, setPreview] = useState<UploadRecord | null>(null);
   const [noteDraft, setNoteDraft] = useState('');
   const [savingId, setSavingId] = useState('');
+  const [downloadingId, setDownloadingId] = useState('');
   const [internalUploadOpen, setInternalUploadOpen] = useState(false);
 
   const load = async (silent = false) => {
@@ -148,10 +150,23 @@ export function UploadRoom() {
     try { setNotice(await shareToChannel(channel, { title: fileName(item), text: `ملف من Avenmedia: ${fileName(item)}`, url })); }
     catch (cause) { setNotice(cause instanceof Error ? cause.message : 'تعذرت مشاركة الملف.'); }
   };
+  const downloadFile = async (item: UploadRecord) => {
+    const url = item.secure_url || item.public_url || item.file_url || '';
+    if (!url) { setNotice('لا يوجد رابط تنزيل متاح لهذا الملف.'); return; }
+    setDownloadingId(item.id); setError(''); setNotice('');
+    try {
+      await openDownloadUrl(cloudinaryAttachmentDownloadUrl(url, fileName(item)));
+      setNotice(`بدأ تنزيل ${fileName(item)}؛ تحقق من مجلد التنزيلات.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'تعذر بدء تنزيل الملف.');
+    } finally {
+      setDownloadingId('');
+    }
+  };
   const shareButtons = (item: UploadRecord) => {
     const url = item.secure_url || item.public_url || item.file_url || '';
     return <div className="flex flex-wrap gap-1.5" aria-label={`إجراءات ${fileName(item)}`}>
-      <a href={url || '#'} target="_blank" rel="noreferrer" download={fileName(item)} aria-disabled={!url} className={`inline-flex items-center gap-1 rounded-lg border border-[#cbd4f5] bg-white px-2 py-1.5 text-[10px] font-bold text-[#142c9b] ${!url ? 'pointer-events-none opacity-40' : ''}`}><Download className="h-3.5" />تنزيل</a>
+      <button type="button" disabled={!url || downloadingId === item.id} onClick={() => void downloadFile(item)} className="inline-flex items-center gap-1 rounded-lg border border-[#cbd4f5] bg-white px-2 py-1.5 text-[10px] font-bold text-[#142c9b] disabled:opacity-40">{downloadingId === item.id ? <Loader2 className="h-3.5 animate-spin" /> : <Download className="h-3.5" />}{downloadingId === item.id ? 'جارٍ التنزيل...' : 'تنزيل'}</button>
       <button type="button" disabled={!url} onClick={() => void shareFile(item, 'whatsapp')} className="inline-flex items-center gap-1 rounded-lg border border-[#cbd4f5] bg-white px-2 py-1.5 text-[10px] font-bold text-[#142c9b] disabled:opacity-40"><MessageCircle className="h-3.5" />WhatsApp</button>
       <button type="button" disabled={!url} onClick={() => void shareFile(item, 'telegram')} className="inline-flex items-center gap-1 rounded-lg border border-[#cbd4f5] bg-white px-2 py-1.5 text-[10px] font-bold text-[#142c9b] disabled:opacity-40"><Send className="h-3.5" />Telegram</button>
       <button type="button" disabled={!url} onClick={() => void shareFile(item, 'instagram')} className="inline-flex items-center gap-1 rounded-lg border border-[#cbd4f5] bg-white px-2 py-1.5 text-[10px] font-bold text-[#142c9b] disabled:opacity-40"><Instagram className="h-3.5" />Instagram</button>

@@ -36,6 +36,21 @@ export async function openExternalUrl(url: string) {
   if (!opened) window.location.assign(url);
 }
 
+export async function openDownloadUrl(url: string) {
+  if (isTauriRuntime()) {
+    await openUrl(url);
+    return;
+  }
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.target = '_blank';
+  anchor.rel = 'noopener noreferrer';
+  anchor.style.display = 'none';
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+}
+
 export async function shareToChannel(channel: ShareChannel, payload: SharePayload) {
   const url = payload.url?.trim() ?? '';
   const text = [payload.text?.trim(), url].filter(Boolean).join('\n');

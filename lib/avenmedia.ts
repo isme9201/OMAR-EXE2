@@ -2,13 +2,15 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { supabaseConfig } from '@/lib/supabase-config';
 import { offlineSupabaseFetch } from '@/lib/offline-first';
 import { normalizeSpecialty } from '@/lib/specialties';
+import { buildTaskAssignments } from '@/lib/avenmedia-task-assignments';
+import type { TaskVisibilityField } from '@/lib/task-visibility';
 
 export type Employee = { id: string; name: string; email: string; role: string; specialty?: string | null; is_active?: boolean };
 export type UploadStatus = 'new' | 'viewed' | 'in_progress' | 'delivered' | 'needs_reupload';
 export type UploadLink = { id: string; token: string; task_id?: string | null; client_name?: string | null; expires_at: string; revoked_at?: string | null; created_at?: string | null };
 export type UploadLinkMetadata = Pick<UploadLink, 'id' | 'task_id' | 'client_name' | 'expires_at' | 'revoked_at' | 'created_at'>;
 export type UploadRecord = { id: string; upload_link_id?: string | null; upload_link?: UploadLinkMetadata | null; file_name?: string | null; client_name?: string | null; file_url?: string | null; public_url?: string | null; secure_url?: string | null; created_at?: string | null; uploaded_at?: string | null; task_id?: string | null; bytes?: number | null; format?: string | null; resource_type?: string | null; status?: UploadStatus | null; note?: string | null; viewed_at?: string | null; viewed_by?: string | null };
-export type AvenmediaTask = { id: string; title: string; task_type: string; client_name?: string | null; client_phone?: string | null; description?: string | null; status: string; priority: string; due_at?: string | null; created_at?: string; assignments?: Employee[] };
+export type AvenmediaTask = { id: string; title: string; task_type: string; client_name?: string | null; client_phone?: string | null; description?: string | null; status: string; priority: string; due_at?: string | null; created_at?: string; visible_fields?: TaskVisibilityField[]; assignments?: Employee[] };
 export type AvenmediaAccount = { id: string; name: string; account_type: string; opening_balance: number; is_active: boolean };
 export type AvenmediaTransaction = { id: string; account_id: string; direction: 'income' | 'expense'; amount: number; category: string; description: string; transaction_date: string; created_at?: string };
 
@@ -24,7 +26,7 @@ export async function listAvenmediaTasks(): Promise<Result<AvenmediaTask[]>> {
   const db = client(); if (!db) return empty([], 'Supabase is not configured');
   const [{ data, error }, { data: assignments, error: assignmentError }, { data: people, error: peopleError }] = await Promise.all([
     db.from('tasks').select('*').order('created_at', { ascending: false }),
-    db.from('task_assignments').select('task_id,employee_id'),
+    db.from('task_assignments').select('task_id,employee_id,visible_fields'),
     db.from('profiles').select('id,name,email,role,specialty').order('name'),
   ]);
   const employeeMap = new Map(((people ?? []) as Employee[]).map((person) => [person.id, { ...person, specialty: normalizeSpecialty(person.specialty) ?? person.specialty ?? null }]));
@@ -65,21 +67,38 @@ export async function updateUploadRecord(id: string, input: Pick<UploadRecord, '
 
 export async function createAvenmediaTask(input: Record<string, unknown>): Promise<Result<AvenmediaTask | null>> {
   const db = client(); if (!db) return empty(null, 'Supabase is not configured');
-  const { employeeIds, ...task } = input;
+  const { employeeIds, assignmentPermissions, ...task } = input;
   const { data: auth } = await db.auth.getSession();
   const payload = { ...task, created_by: (task.created_by as string | undefined) ?? auth.session?.user.id };
   const { data, error } = await db.from('tasks').insert(payload).select('*').single();
   if (error || !data) return empty(null, error?.message ?? 'Task creation failed');
-  if (Array.isArray(employeeIds) && employeeIds.length) await db.from('task_assignments').insert(employeeIds.map((employee_id) => ({ task_id: data.id, employee_id })));
+  if (Array.isArray(employeeIds) && employeeIds.length) {
+    const rows = buildTaskAssignments(data.id, employeeIds as string[], (assignmentPermissions ?? {}) as Record<string, unknown>);
+    const { error: assignmentError } = await db.from('task_assignments').insert(rows);
+    if (assignmentError) {
+      await db.from('tasks').delete().eq('id', data.id);
+      return empty(null, assignmentError.message ?? 'Task assignments could not be saved');
+    }
+  }
   return empty(data as AvenmediaTask);
 }
 
 export async function updateAvenmediaTask(id: string, input: Record<string, unknown>): Promise<Result<AvenmediaTask | null>> {
   const db = client(); if (!db) return empty(null, 'Supabase is not configured');
-  const { employeeIds, ...task } = input;
+  const { employeeIds, assignmentPermissions, ...task } = input;
   const { data, error } = await db.from('tasks').update(task).eq('id', id).select('*').single();
   if (error || !data) return empty(null, error?.message ?? 'Task update failed');
-  if (Array.isArray(employeeIds)) { await db.from('task_assignments').delete().eq('task_id', id); if (employeeIds.length) await db.from('task_assignments').insert(employeeIds.map((employee_id) => ({ task_id: id, employee_id }))); }
+  if (Array.isArray(employeeIds)) {
+    const previous = await db.from('task_assignments').select('employee_id,visible_fields').eq('task_id', id);
+    if (previous.error) return empty(null, previous.error.message);
+    const removed = await db.from('task_assignments').delete().eq('task_id', id);
+    if (removed.error) return empty(null, removed.error.message);
+    if (employeeIds.length) {
+      const rows = buildTaskAssignments(id, employeeIds as string[], (assignmentPermissions ?? {}) as Record<string, unknown>, previous.data ?? []);
+      const inserted = await db.from('task_assignments').insert(rows);
+      if (inserted.error) return empty(null, inserted.error.message);
+    }
+  }
   return empty(data as AvenmediaTask);
 }
 

@@ -14,15 +14,17 @@ import {
 import type { WorkspacePage } from "@/lib/workspaces";
 import { createWorkspaceRecord, getStudioThemePreference, loadWorkspaceRecords, recordStudioAction, saveStudioThemePreference, updateWorkspaceRecord, type WorkspaceRecord } from "@/lib/supabase-browser";
 import { invokeAvenmediaFunction } from "@/lib/avenmedia";
-import { signOut } from "@/lib/avenmedia-auth";
+import { getAuthClient, signOut } from "@/lib/avenmedia-auth";
 import { getOfflineSyncStatus, retryOfflineSync, subscribeOfflineSyncStatus, type OfflineSyncStatus } from "@/lib/offline-first";
 import { AvenmediaOperations } from "@/components/AvenmediaOperations";
 import { RequestManagement } from "@/components/RequestManagement";
 import { RequestCreateModal } from "@/components/RequestCreateModal";
 import { EmployeeTasks } from "@/components/EmployeeTasks";
+import { EmployeeTaskCreateModal } from "@/components/EmployeeTaskCreateModal";
 import { RequestSearchCard } from "@/components/RequestSearchCard";
 import { NotificationBell } from "@/components/NotificationBell";
 import { UploadRoom } from "@/components/UploadRoom";
+import { UploadLinkModal } from "@/components/UploadLinkModal";
 import { shareToChannel } from "@/lib/share-targets";
 import DataStorageSettings from "@/components/DataStorageSettings";
 
@@ -92,12 +94,16 @@ export function DashboardApp({ page }: { page: WorkspacePage }) {
   const [linkDialog, setLinkDialog] = useState<{ url: string; expiresAt: string } | null>(null);
   const [linkHistory, setLinkHistory] = useState<UploadLink[]>([]);
   const [linksLoading, setLinksLoading] = useState(false);
+  const [uploadLinkModalOpen, setUploadLinkModalOpen] = useState(false);
+  const [employeeTaskModalOpen, setEmployeeTaskModalOpen] = useState(false);
+  const [isTaskManager, setIsTaskManager] = useState(false);
   const [selectedNavGroup, setSelectedNavGroup] = useState('');
   const [openNavGroup, setOpenNavGroup] = useState('');
 
   useEffect(() => { document.documentElement.classList.toggle("dark", dark); }, [dark]);
   useEffect(() => { setSelectedNavGroup(''); setOpenNavGroup(''); }, [page]);
   useEffect(() => { let cancelled = false; void getStudioThemePreference().then((theme) => { if (!cancelled && theme) { setDark(theme === "dark"); window.localStorage.setItem("photomedia-theme", theme); } }); return () => { cancelled = true; }; }, []);
+  useEffect(() => { let active = true; void (async () => { try { const db = getAuthClient(); const { data: auth } = await db.auth.getUser(); if (!auth.user) return; const { data: profile } = await (db as any).from("profiles").select("role").eq("id", auth.user.id).maybeSingle(); if (active) setIsTaskManager(["admin", "manager"].includes(String(profile?.role ?? "").toLowerCase())); } catch { if (active) setIsTaskManager(false); } })(); return () => { active = false; }; }, []);
   useEffect(() => {
     let active = true;
     void getOfflineSyncStatus().then((status) => { if (active) setSyncStatus(status); });
@@ -245,7 +251,7 @@ export function DashboardApp({ page }: { page: WorkspacePage }) {
 
           <div className={`mb-6 flex items-center gap-3 rounded-xl border px-4 py-3 text-xs ${dark ? "border-[#3c5d53] bg-[#142c9b]/30 text-[#dcf1e4]" : "border-[#c9ded2] bg-[#e6ebff] text-[#142c9b]"}`}><Zap className="h-4 w-4 fill-current" /><span>{notice}</span></div>
 
-          {safePage === "overview" && <SimpleOverview setModal={setModal} />}
+          {safePage === "overview" && <SimpleOverview setModal={setModal} isTaskManager={isTaskManager} onCreateTask={() => setEmployeeTaskModalOpen(true)} onCreateUploadLink={() => setUploadLinkModalOpen(true)} />}
           {(safePage === "calendar" || safePage === "clients") && <RequestManagement />}
           {safePage === "production" && <EmployeeTasks />}
           {safePage === "operations" && <AvenmediaOperations />}
@@ -260,6 +266,8 @@ export function DashboardApp({ page }: { page: WorkspacePage }) {
       {modal === "booking" && <RequestCreateModal onClose={() => setModal(null)} onSaved={() => setNotice("تم حفظ الطلب الكامل في التخزين بنجاح.")} />}
       {modal && modal !== "booking" && <ActionModal kind={modal} close={() => setModal(null)} onCreate={modal === "magic" ? createMagicLink : (payload) => createRecord(modal, payload)} />}
       {linkDialog && <UploadLinkDialog link={linkDialog} history={linkHistory} loading={linksLoading} onClose={() => setLinkDialog(null)} onRefresh={() => void loadLinkHistory()} />}
+      <UploadLinkModal open={uploadLinkModalOpen} onClose={() => setUploadLinkModalOpen(false)} />
+      <EmployeeTaskCreateModal open={employeeTaskModalOpen} onClose={() => setEmployeeTaskModalOpen(false)} onSaved={() => setNotice("تم إنشاء المهمة وإسنادها؛ جرى حفظ المرفقات في سجل الملفات.")} />
       {showScrollTop && <button type="button" aria-label="العودة إلى أعلى الصفحة" title="العودة إلى أعلى الصفحة" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} className="fixed bottom-6 left-6 z-40 grid h-11 w-11 place-items-center rounded-full bg-[#142c9b] text-white shadow-xl transition hover:-translate-y-1"><ChevronUp className="h-5" /></button>}
     </main>
   );
@@ -308,14 +316,14 @@ function Timeline({ time, title, meta, color }: { time: string; title: string; m
   return <div className="relative grid grid-cols-[62px_1fr] gap-3 py-3.5"><span className="font-mono text-xs text-[#67756e]">{time}</span><div><span className="absolute -right-[25px] top-5 h-2.5 w-2.5 rounded-full border-2 border-[#ffffff]" style={{ background: color }} /><strong className="block text-sm">{title}</strong><span className="mt-1 block text-xs text-[#6d7b74]">{meta}</span></div></div>;
 }
 
-function SimpleOverview({ setModal }: { setModal: (kind: ModalKind) => void }) {
+function SimpleOverview({ setModal, onCreateTask, onCreateUploadLink, isTaskManager }: { setModal: (kind: ModalKind) => void; onCreateTask: () => void; onCreateUploadLink: () => void; isTaskManager: boolean }) {
   const actions = [
     ["/calendar", "إدارة الطلبات", "إضافة طلب، البحث، التعديل والحذف", ClipboardList],
     ["/operations", "إدارة الفريق", "الموظفون والتخصصات والمهام", UsersRound],
     ["/production", "إدارة المهام", "متابعة مراحل التنفيذ والمنجزات", Video],
     ["/reports", "التقارير", "كشف الحساب وطباعة PDF", ReceiptText],
   ] as const;
-  return <div dir="rtl" className="space-y-6"><section className="rounded-[28px] bg-[#080d24] p-8 text-white shadow-xl"><span className="font-mono text-xs tracking-[.2em] text-[#b9c3ff]">AVENMEDIA / CONTROL DESK</span><h2 className="mt-3 text-4xl font-black">مكتب الإدارة</h2><p className="mt-3 max-w-2xl text-sm leading-7 text-indigo-100">واجهة مختصرة للوصول السريع إلى طلبات الزبائن، المهام، المنفذين، والتقارير.</p><div className="mt-6 flex flex-wrap gap-3"><button onClick={() => setModal("booking")} className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-black text-[#080d24]"><Plus className="h-4" />إضافة طلب</button><Link href="/upload" className="inline-flex items-center gap-2 rounded-xl border border-white/30 px-4 py-3 text-sm font-bold"><Link2 className="h-4" />رابط رفع للزبون</Link></div></section><RequestSearchCard /><section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{actions.map(([href, title, description, Icon]) => <Link key={href} href={href} className="group rounded-2xl border border-[#dce1ff] bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:border-[#3159d8]"><span className="grid h-11 w-11 place-items-center rounded-xl bg-[#e6ebff] text-[#3159d8]"><Icon className="h-5" /></span><h3 className="mt-4 text-lg font-black text-[#080d24]">{title}</h3><p className="mt-2 text-xs leading-6 text-slate-500">{description}</p><span className="mt-4 block text-xs font-bold text-[#3159d8]">عرض الكل ←</span></Link>)}</section></div>;
+  return <div dir="rtl" className="space-y-6"><section className="rounded-[28px] bg-[#080d24] p-8 text-white shadow-xl"><span className="font-mono text-xs tracking-[.2em] text-[#b9c3ff]">AVENMEDIA / CONTROL DESK</span><h2 className="mt-3 text-4xl font-black">مكتب الإدارة</h2><p className="mt-3 max-w-2xl text-sm leading-7 text-indigo-100">واجهة مختصرة للوصول السريع إلى طلبات الزبائن، المهام، المنفذين، والتقارير.</p><div className="mt-6 flex flex-wrap gap-3">{isTaskManager && <button onClick={() => setModal("booking")} className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-black text-[#080d24]"><Plus className="h-4" />إضافة طلب</button>}<button type="button" onClick={onCreateUploadLink} className="inline-flex items-center gap-2 rounded-xl border border-white/30 px-4 py-3 text-sm font-bold"><Link2 className="h-4" />رابط رفع للزبون</button>{isTaskManager && <button type="button" onClick={onCreateTask} className="inline-flex items-center gap-2 rounded-xl border border-white/30 px-4 py-3 text-sm font-bold"><FilePlus2 className="h-4" />إنشاء مهمة للموظفين</button>}</div></section><RequestSearchCard /><section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{actions.map(([href, title, description, Icon]) => <Link key={href} href={href} className="group rounded-2xl border border-[#dce1ff] bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:border-[#3159d8]"><span className="grid h-11 w-11 place-items-center rounded-xl bg-[#e6ebff] text-[#3159d8]"><Icon className="h-5" /></span><h3 className="mt-4 text-lg font-black text-[#080d24]">{title}</h3><p className="mt-2 text-xs leading-6 text-slate-500">{description}</p><span className="mt-4 block text-xs font-bold text-[#3159d8]">عرض الكل ←</span></Link>)}</section></div>;
 }
 function TaskCard({ task, advanceTask }: { task: Task; advanceTask: (id: number) => void }) {
   return <article className="rounded-2xl border border-[#dfe5fb] bg-[#ffffff] p-4 transition hover:border-[#b8cfc2]"><div className="mb-3 flex items-start justify-between gap-2"><span className={`rounded-lg px-2 py-1 text-[10px] font-extrabold ${task.tone}`}>{task.stage}</span><button aria-label="خيارات المهمة" onClick={() => advanceTask(task.id)} className="text-[#58617e]"><MoreHorizontal className="h-4" /></button></div><h4 className="m-0 text-sm font-extrabold">{task.client}</h4><p className="mt-1 text-xs text-[#58617e]">{task.title}</p><div className="mt-4 flex items-center justify-between text-[11px]"><span className="font-mono text-[#142c9b]">{task.due}</span><span className="font-bold text-[#506159]">{task.owner}</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#cbd4f5]"><div className="h-full rounded-full bg-[#142c9b]" style={{ width: `${task.progress}%` }} /></div><button onClick={() => advanceTask(task.id)} className="mt-4 w-full rounded-lg border border-[#cfe0d6] bg-[#edf6f0] py-2 text-xs font-extrabold text-[#142c9b] transition hover:bg-[#dcefe4] active:scale-[.98]">نقل للمرحلة التالية</button></article>;

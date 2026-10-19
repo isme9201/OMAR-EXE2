@@ -141,7 +141,7 @@
 
   function draw() {
     queue.replaceChildren();
-    if (!jobs.length) queue.innerHTML = '<p class="muted">لم يتم اختيار ملفات بعد.</p>';
+    if (!jobs.length) queue.innerHTML = '<p class="list-empty">لم يتم اختيار ملفات بعد.</p>';
     for (const job of jobs) {
       const el = document.createElement('div');
       el.className = 'item';
@@ -149,6 +149,12 @@
       const sent = Math.min(Number(job.nextOffset || 0), Number(job.size || 0));
       el.innerHTML = `<div class="row"><span class="name" title="${safe(job.fileName)}">${safe(job.fileName)}</span><span class="status">${safe(statusLabel(job))}</span></div><div class="meta">${formatSize(job.size)} · ${formatSize(sent)} من ${formatSize(job.size)}</div><div class="bar"><span style="width:${progress}%"></span></div><div class="meta">${Math.round(progress)}%</div>`;
       queue.appendChild(el);
+    }
+    const queueSummary = $('queueSummary');
+    if (queueSummary) {
+      const completed = jobs.filter((job) => job.status === 'done').length;
+      const pending = jobs.length - completed;
+      queueSummary.textContent = jobs.length ? `${jobs.length} ملف · ${completed} مكتمل · ${pending} متبقٍ` : 'لا توجد ملفات بعد';
     }
     startButton.disabled = !token || jobs.every((job) => job.status === 'done' || job.status === 'blocked') || runners.size > 0;
     clearButton.disabled = !jobs.length || runners.size > 0;
@@ -262,7 +268,19 @@
 
   function drawHistory() {
     const items = history();
-    historyBox.innerHTML = items.length ? items.map((item) => `<div class="item"><div class="row"><span class="name">${safe(item.name)}</span><a class="link" href="${safe(item.url)}" target="_blank" rel="noreferrer" download>تنزيل</a></div><div class="meta">${formatSize(item.size)} · ${safe(new Date(item.date).toLocaleString('ar-IQ'))}</div></div>`).join('') : '<p class="muted">سيظهر هنا كل ملف تم رفعه بهذا الرابط.</p>';
+    historyBox.innerHTML = items.length ? items.map((item) => `<div class="item"><div class="row"><span class="name">${safe(item.name)}</span><a class="link" href="${safe(item.url)}" target="_blank" rel="noreferrer" download>تنزيل</a></div><div class="meta">${formatSize(item.size)} · ${safe(new Date(item.date).toLocaleString('ar-IQ'))}</div></div>`).join('') : '<p class="list-empty">سيظهر هنا كل ملف تم رفعه بهذا الرابط.</p>';
+  }
+
+  function drawLinkInfo(data) {
+    const info = $('clientInfo');
+    if (!info) return;
+    const clientName = String(data?.clientName || '').trim();
+    $('clientName').textContent = clientName || 'هذا الرابط مخصص لك';
+    const expiresAt = Date.parse(data?.expiresAt || '');
+    $('expiresAt').textContent = Number.isFinite(expiresAt)
+      ? `تنتهي صلاحية الرابط: ${new Date(expiresAt).toLocaleString('ar-IQ', { dateStyle: 'medium', timeStyle: 'short' })}`
+      : 'استخدم هذا الرابط لإرسال الملفات المطلوبة فقط.';
+    info.classList.remove('hidden');
   }
 
   async function addFiles(list) {
@@ -454,11 +472,12 @@
     draw();
     show(`تم مسح ${finished.length} سجل من هذه الصفحة.`, 'info');
   });
-  $('clearHistory').addEventListener('click', () => { localStorage.removeItem(`aven-history-${token}`); drawHistory(); });
+  $('clearHistory').addEventListener('click', () => { localStorage.removeItem(`aven-history-${token}`); drawHistory(); show('تم مسح السجل المحلي من هذا المتصفح؛ الملفات المرفوعة تبقى محفوظة لدى الفريق.', 'info'); });
   const drop = $('drop');
   drop.addEventListener('dragover', (event) => { event.preventDefault(); drop.classList.add('drag'); });
   drop.addEventListener('dragleave', () => drop.classList.remove('drag'));
   drop.addEventListener('drop', (event) => { event.preventDefault(); drop.classList.remove('drag'); void addFiles([...(event.dataTransfer?.files || [])]); });
+  drop.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); fileInput.click(); } });
   window.addEventListener('online', () => { for (const job of jobs) if (job.status !== 'done' && job.status !== 'blocked') void scheduleInBackground(job.id); show('عاد الاتصال. تتم متابعة الملفات المحفوظة.', 'info'); void runPending(); });
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
@@ -500,6 +519,7 @@
       }
       page.classList.remove('hidden');
       blocked.classList.add('hidden');
+      drawLinkInfo(data);
       const items = history();
       const known = new Set(items.map((item) => item.url));
       for (const item of data.uploads || []) {

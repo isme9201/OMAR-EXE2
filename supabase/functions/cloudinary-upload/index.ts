@@ -135,8 +135,7 @@ Deno.serve(async (request) => {
 
   if (action === "create_link") {
     const token = crypto.randomUUID().replaceAll("-", "");
-    const requestedHours = Number(payload?.ttlHours ?? 48);
-    const ttlHours = Number.isFinite(requestedHours) ? Math.max(1, Math.min(168, Math.round(requestedHours))) : 48;
+    const ttlHours = 24;
     const expiresAt = new Date(Date.now() + ttlHours * 60 * 60 * 1000).toISOString();
     const clientName = typeof payload?.clientName === "string" ? payload.clientName.trim().slice(0, 160) || null : null;
     const { data: link, error } = await adminClient.from("task_upload_links").insert({ token, task_id: typeof payload?.taskId === "string" ? payload.taskId : null, client_name: clientName, expires_at: expiresAt, created_by: callerId }).select("id,token,task_id,client_name,expires_at,created_at").single();
@@ -179,11 +178,11 @@ Deno.serve(async (request) => {
   }
   if (action === "list_uploads") {
     const token = String(payload?.token ?? "");
-    const { data: link } = await adminClient.from("task_upload_links").select("token,expires_at,revoked_at").eq("token", token).maybeSingle();
+    const { data: link } = await adminClient.from("task_upload_links").select("token,client_name,expires_at,revoked_at").eq("token", token).maybeSingle();
     if (!link || link.revoked_at || new Date(link.expires_at).getTime() <= Date.now()) return json({ error: "Upload link expired or invalid" }, 410);
     const { data: uploads, error } = await adminClient.from("client_uploads").select("id,file_name,secure_url,resource_type,bytes,format,uploaded_at,status").eq("upload_token", token).order("uploaded_at", { ascending: false }).limit(100);
     if (error) return json({ error: error.message }, 400);
-    return json({ uploads: uploads ?? [] });
+    return json({ uploads: uploads ?? [], clientName: link.client_name ?? null, expiresAt: link.expires_at });
   }
   return json({ error: "Unknown action" }, 400);
 });

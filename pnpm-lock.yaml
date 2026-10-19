@@ -8,15 +8,33 @@ importers:
 
   .:
     dependencies:
+      '@pdf-lib/fontkit':
+        specifier: ^1.1.1
+        version: 1.1.1
       '@supabase/supabase-js':
         specifier: ^2.112.4
         version: 2.112.4
       '@tauri-apps/api':
         specifier: ^2.8.0
         version: 2.11.1
+      '@tauri-apps/plugin-dialog':
+        specifier: 2.7.3
+        version: 2.7.3
+      '@tauri-apps/plugin-opener':
+        specifier: 2.5.4
+        version: 2.5.4
+      arabic-persian-reshaper:
+        specifier: ^1.0.1
+        version: 1.0.1
+      bidi-js:
+        specifier: ^1.1.0
+        version: 1.1.0
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(mysql2@3.24.2(@types/node@22.20.1))
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
       lucide-react:
         specifier: ^0.468.0
         version: 0.468.0(react@19.2.1)
@@ -373,6 +391,9 @@ packages:
   '@oxc-project/types@0.147.0':
     resolution: {integrity: sha512-IJ3s6ltHLp45S0bh7phkX+gJO7A1Wuz2EaqpAhb8WjqDwbzMiWKHhyyT42tskaWjEYXtHtVCPpnBJVT9+dcRLg==}
 
+  '@pdf-lib/fontkit@1.1.1':
+    resolution: {integrity: sha512-KjMd7grNapIWS/Dm0gvfHEilSyAmeLvrEGVcqLGi0VYebuqqzTbgF29efCx7tvx+IEbG3zQciRSWl3GkUSvjZg==}
+
   '@pdf-lib/standard-fonts@1.0.0':
     resolution: {integrity: sha512-hU30BK9IUN/su0Mn9VdlVKsWBS6GyhVfqjwl1FjZN4TxP6cCw0jP2w7V3Hf5uX7M0AZJ16vey9yE0ny7Sa59ZA==}
 
@@ -611,6 +632,9 @@ packages:
   '@tauri-apps/api@2.11.1':
     resolution: {integrity: sha512-M2FPuYND2m+wh5hfW9ZpSdxMPdEJovPBWwoHJmwUpysTYNHaOkVFN419m/K0LIgjb/7KU2vBgsUepJWugQCvAA==}
 
+  '@tauri-apps/api@2.12.4':
+    resolution: {integrity: sha512-pVmfis+4zT8H0Qhp3xPZx9Ju7kpzvA6rr/PSJPyuwfvucTQ8sVt61NYU9KMkK703UFlYadFmjKA4HhybOtN0gg==}
+
   '@tauri-apps/cli-darwin-arm64@2.11.4':
     resolution: {integrity: sha512-1ryOF3ZhpZ/nemHV5zVwBQBz9jDGKmKPvWPADOhc83ig0P4bMc2iER4NbC6r9sjeIZ6RVQ4g3RZIYvezhcl4TQ==}
     engines: {node: '>= 10'}
@@ -687,6 +711,12 @@ packages:
     engines: {node: '>= 10'}
     hasBin: true
 
+  '@tauri-apps/plugin-dialog@2.7.3':
+    resolution: {integrity: sha512-CRgE+7TP4tvq9MjBU6f04NLTFIqVMLKHk3hAqlhil00ngK9ACTrXPH3oHpKMProxILodd3YjBoKbMwSI4IEcfA==}
+
+  '@tauri-apps/plugin-opener@2.5.4':
+    resolution: {integrity: sha512-1HnPkb+AmgO29HBazm4uPLKB+r7zzcTBW1d0fyYp1uP+jwtpoiNDGKMMzz58SFp49nOIrxdE3aUJtT57lfO9CQ==}
+
   '@types/chai@5.2.3':
     resolution: {integrity: sha512-Mw558oeA9fFbv65/y4mHtXDs9bPnFMZAL/jxdPFUpOHHIXX91mcgEHbS5Lahr+pwZFR8A7GQleRWeI6cGFC2UA==}
 
@@ -736,6 +766,9 @@ packages:
   '@vitest/utils@4.1.11':
     resolution: {integrity: sha512-zTCVGpyFsGWBhllOyKlTw/vnr6D9qxsfSDyfbyZmTyjHw5N/VuvzHpHoQjm2ZJzn4RJgx5w4r7V0er69CmLgPQ==}
 
+  arabic-persian-reshaper@1.0.1:
+    resolution: {integrity: sha512-VYBjkhz6o4W1Xt4mD2LAReljJpLSw5CUZMqSBDIQRvFgUSlTKEYghapgBWvkeMWF4W+KF3Fm+/z8EywJU4PBeg==}
+
   assertion-error@2.0.1:
     resolution: {integrity: sha512-Izi8RQcffqCeNVgFigKli1ssklIbpHnCYc6AknXGYoB6grJqyeby7jv12JUQgmTAnIDnbck1uxksT4dzN3PWBA==}
     engines: {node: '>=12'}
@@ -748,6 +781,9 @@ packages:
     resolution: {integrity: sha512-1iEmLEYSiE1SeBoAfPo/Mnx3PzfzHUkDK61ASkCpuk3YXugYLH5DYK1SzqV55F8FMI6s0F+/tCP7Polz1QRjxw==}
     engines: {node: '>=6.0.0'}
     hasBin: true
+
+  bidi-js@1.1.0:
+    resolution: {integrity: sha512-fX1Onk0tdVPC7obPWB5EbJ1z7NVhLq4m2xZLq2YXBkxzMXIGRpNMU88n0EPgWseKl12J7zXs7qrDxPK4sRs2fg==}
 
   browserslist@4.26.3:
     resolution: {integrity: sha512-lAUU+02RFBuCKQPj/P6NgjlbCnLBMp4UtgTx7vNHd3XSIJF87s9a5rA3aH2yw3GS9DqZAUbOtZdCCiZeVRqt0w==}
@@ -904,6 +940,9 @@ packages:
     peerDependenciesMeta:
       picomatch:
         optional: true
+
+  fflate@0.8.3:
+    resolution: {integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==}
 
   fsevents@2.3.3:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
@@ -1191,6 +1230,10 @@ packages:
 
   react@19.2.1:
     resolution: {integrity: sha512-DGrYcCWK7tvYMnWh79yrPHt+vdx9tY+1gPZa7nJQtO/p8bLTDaHp4dzwEhQB7pZ4Xe3ok4XKuEPrVuc+wlpkmw==}
+    engines: {node: '>=0.10.0'}
+
+  require-from-string@2.0.2:
+    resolution: {integrity: sha512-Xf0nWe6RseziFMu+Ap9biiUbmplq6S9/p+7w7YXP/JBHhrUDDUhwa+vANyubuqfZWTveU//DYVGsDG7RKL/vEw==}
     engines: {node: '>=0.10.0'}
 
   rolldown@1.2.6:
@@ -1668,6 +1711,10 @@ snapshots:
 
   '@oxc-project/types@0.147.0': {}
 
+  '@pdf-lib/fontkit@1.1.1':
+    dependencies:
+      pako: 1.0.11
+
   '@pdf-lib/standard-fonts@1.0.0':
     dependencies:
       pako: 1.0.11
@@ -1832,6 +1879,8 @@ snapshots:
 
   '@tauri-apps/api@2.11.1': {}
 
+  '@tauri-apps/api@2.12.4': {}
+
   '@tauri-apps/cli-darwin-arm64@2.11.4':
     optional: true
 
@@ -1878,6 +1927,14 @@ snapshots:
       '@tauri-apps/cli-win32-arm64-msvc': 2.11.4
       '@tauri-apps/cli-win32-ia32-msvc': 2.11.4
       '@tauri-apps/cli-win32-x64-msvc': 2.11.4
+
+  '@tauri-apps/plugin-dialog@2.7.3':
+    dependencies:
+      '@tauri-apps/api': 2.12.4
+
+  '@tauri-apps/plugin-opener@2.5.4':
+    dependencies:
+      '@tauri-apps/api': 2.12.4
 
   '@types/chai@5.2.3':
     dependencies:
@@ -1941,11 +1998,17 @@ snapshots:
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.1
 
+  arabic-persian-reshaper@1.0.1: {}
+
   assertion-error@2.0.1: {}
 
   aws-ssl-profiles@1.1.2: {}
 
   baseline-browser-mapping@2.11.18: {}
+
+  bidi-js@1.1.0:
+    dependencies:
+      require-from-string: 2.0.2
 
   browserslist@4.26.3:
     dependencies:
@@ -1999,6 +2062,8 @@ snapshots:
   fdir@6.5.0(picomatch@4.0.7):
     optionalDependencies:
       picomatch: 4.0.7
+
+  fflate@0.8.3: {}
 
   fsevents@2.3.3:
     optional: true
@@ -2229,6 +2294,8 @@ snapshots:
       scheduler: 0.27.0
 
   react@19.2.1: {}
+
+  require-from-string@2.0.2: {}
 
   rolldown@1.2.6:
     dependencies:

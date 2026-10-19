@@ -1,17 +1,18 @@
 import { createClient, type Session, type User } from '@supabase/supabase-js';
 import { supabaseConfig } from '@/lib/supabase-config';
-
-export const SPECIALTIES = [
-  { value: 'designer', label: 'مصمم' },
-  { value: 'marketing', label: 'تسويق' },
-  { value: 'editor', label: 'مونتاج' },
-  { value: 'accountant', label: 'محاسب' },
-  { value: 'photographer', label: 'مصور' },
-  { value: 'hr', label: 'موارد بشرية' },
-] as const;
+import { offlineSupabaseFetch } from '@/lib/offline-first';
+export { SPECIALTIES } from '@/lib/specialties';
 
 function logAuthError(operation: string, error: unknown) {
   if (typeof console !== 'undefined') console.error(`[Avenmedia][auth][${operation}]`, error);
+}
+
+function authMessage(error: { message?: string } | null | undefined) {
+  const message = error?.message ?? '';
+  if (/failed to fetch|network|fetch/i.test(message)) return 'تعذر الاتصال بخدمة Supabase. تأكد من الإنترنت أو أعد المحاولة بعد لحظات.';
+  if (/invalid login credentials/i.test(message)) return 'البريد الإلكتروني أو كلمة المرور غير صحيحة.';
+  if (/email not confirmed/i.test(message)) return 'يجب تأكيد البريد الإلكتروني قبل تسجيل الدخول.';
+  return message;
 }
 
 let authClient: ReturnType<typeof createClient> | null = null;
@@ -20,6 +21,7 @@ export function getAuthClient() {
   const { url, key } = supabaseConfig();
   authClient = createClient(url, key, {
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'pkce' },
+    global: { fetch: offlineSupabaseFetch },
   });
   return authClient;
 }
@@ -30,7 +32,7 @@ export async function signIn(email: string, password: string) {
   const result = await db.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
   if (result.error) logAuthError('sign-in', result.error);
   if (!result.error && typeof window !== 'undefined') window.localStorage.setItem('avenmedia-login-at', String(Date.now()));
-  return { data: result.data, error: result.error?.message ?? '' };
+  return { data: result.data, error: authMessage(result.error) };
 }
 
 export async function signOut() {
@@ -48,7 +50,7 @@ export async function getSession() {
     if (Date.now() - started > 31 * 24 * 60 * 60 * 1000) { await signOut(); return { session: null, user: null, error: 'انتهت جلسة الشهر، سجّل الدخول مرة أخرى' }; }
   }
   if (error) logAuthError('get-session', error);
-  return { session: data.session, user: data.session?.user ?? null, error: error?.message ?? '' };
+  return { session: data.session, user: data.session?.user ?? null, error: authMessage(error) };
 }
 
 export function onAuthChange(callback: (session: Session | null) => void) {
@@ -61,7 +63,7 @@ export async function profileFor(userId: string) {
   if (!db) return { data: null, error: 'Supabase غير مهيأ' };
   const { data, error } = await db.from('profiles').select('id,name,email,role,specialty,is_active').eq('id', userId).maybeSingle();
   if (error) logAuthError('profile', error);
-  return { data, error: error?.message ?? '' };
+  return { data, error: authMessage(error) };
 }
 
 export async function toggleAttendance(userId: string) {

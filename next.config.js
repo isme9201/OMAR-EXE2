@@ -5,13 +5,7 @@ const nextConfig = {
     unoptimized: true
   },
   trailingSlash: true,
-  // هذا الإعداد سيتجاهل أي أخطاء في ملفات eslint أو typescript ويكمل البيلد غصباً عنه
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  typescript: {
-    ignoreBuildErrors: true,
-  }
+  // TypeScript is checked explicitly in CI and must not be bypassed in releases.
 };
 
 module.exports = nextConfig;

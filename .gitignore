@@ -1,0 +1,27 @@
+# Dependencies and local package-manager state
+node_modules/
+.pnpm-store/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Next.js and generated outputs
+.next/
+out/
+build/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Tauri / Rust build outputs
+target/
+src-tauri/target/
+
+# Local environment and editor files
+.env
+.env.*
+!.env.example
+.DS_Store
+*.swp
+*.swo
+.vscode/

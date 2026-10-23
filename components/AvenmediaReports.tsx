@@ -2,9 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Check, Download, ExternalLink, Loader2, RefreshCw } from "lucide-react";
-import { PDFDocument, rgb } from "pdf-lib";
 import { getAuthClient } from "@/lib/avenmedia-auth";
-import { embedAvenmediaFonts, enableArabicPdfText } from "@/lib/pdf-arabic";
+import { makeMonthlyReportPdf } from "@/lib/avenmedia-pdf";
 import { downloadPdf, openDownloadedPdf } from "@/lib/pdf-export";
 
 type Summary = { income: number; expenses: number; net: number; tasks: number; completed: number; open: number; attendance: number };
@@ -48,28 +47,7 @@ export function AvenmediaReports() {
 
   const pdf = async () => {
     try {
-      const doc = await PDFDocument.create(); const pdfFonts = await embedAvenmediaFonts(doc);
- enableArabicPdfText(doc, pdfFonts);
- const { font, bold } = pdfFonts;
-      const page = doc.addPage([595, 842]);
-      page.drawRectangle({ x: 0, y: 0, width: 595, height: 842, color: rgb(.97, .98, 1) });
-      page.drawRectangle({ x: 0, y: 760, width: 595, height: 82, color: rgb(.06, .10, .30) });
-      try { const response = await fetch("/branding/aven-logo-192.png"); if (response.ok) { const logo = await doc.embedPng(new Uint8Array(await response.arrayBuffer())); page.drawImage(logo, { x: 45, y: 778, width: 42, height: 42 }); } } catch { /* logo is decorative; continue if unavailable */ }
-      page.drawText("AVENMEDIA", { x: 100, y: 807, size: 24, font: bold, color: rgb(1, 1, 1) });
-      page.drawText("كشف الحساب الشهري", { x: 100, y: 785, size: 10, font, color: rgb(.72, .78, 1) });
-      page.drawText(month, { x: 485, y: 798, size: 13, font: bold, color: rgb(1, 1, 1) });
-      const reportCards = [["الإيرادات", summary.income, rgb(.15, .35, .85)], ["المصاريف", summary.expenses, rgb(.68, .30, .22)], ["صافي الربح", summary.net, summary.net >= 0 ? rgb(.06, .42, .31) : rgb(.68, .20, .24)], ["المهام المنجزة", summary.completed, rgb(.30, .25, .60)], ["المهام المفتوحة", summary.open, rgb(.66, .43, .12)], ["الحضور", summary.attendance, rgb(.20, .37, .48)]] as const;
-      reportCards.forEach(([label, value, color], index) => {
-        const col = index % 2, row = Math.floor(index / 2), x = 45 + col * 260, y = 652 - row * 125;
-        page.drawRectangle({ x, y, width: 240, height: 98, color: rgb(1, 1, 1), borderColor: rgb(.80, .84, .93), borderWidth: 1 });
-        page.drawRectangle({ x, y, width: 7, height: 98, color });
-        page.drawText(label, { x: x + 20, y: y + 66, size: 11, font: bold, color: rgb(.25, .29, .42) });
-        page.drawText(String(value), { x: x + 20, y: y + 27, size: 23, font: bold, color });
-      });
-      page.drawLine({ start: { x: 45, y: 235 }, end: { x: 550, y: 235 }, thickness: 1, color: rgb(.80, .84, .93) });
-      page.drawText("تم إنشاء التقرير من مكتب إنتاج AVENMEDIA", { x: 45, y: 205, size: 10, font, color: rgb(.36, .40, .52) });
-      page.drawText(new Date().toLocaleDateString("ar-IQ"), { x: 455, y: 205, size: 10, font, color: rgb(.36, .40, .52) });
-      const bytes = await doc.save();
+      const bytes = await makeMonthlyReportPdf(month, summary);
       const result = await downloadPdf(bytes, `avenmedia-statement-${month}.pdf`);
       setDownloadUrl(result.objectUrl || "");
       setDownloaded(result.native ? "تم حفظ كشف الحساب وفتح مجلد التنزيلات" : "تم تنزيل كشف الحساب بنجاح");

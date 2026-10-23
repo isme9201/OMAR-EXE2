@@ -2,9 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Download, ExternalLink, Loader2, Plus, RefreshCw, Trash2 } from 'lucide-react';
-import { PDFDocument, rgb, type PDFImage } from 'pdf-lib';
 import { getAuthClient } from '@/lib/avenmedia-auth';
-import { embedAvenmediaFonts, enableArabicPdfText } from '@/lib/pdf-arabic';
+import { makeFinanceLedgerPdf } from '@/lib/avenmedia-pdf';
 import { downloadPdf, openDownloadedPdf } from '@/lib/pdf-export';
 
 type Entry = { id: string; entry_type: 'income' | 'expense'; amount: number | string; description: string; entry_date: string };
@@ -49,41 +48,7 @@ export function FinanceLedger() {
 
   const pdf = async () => {
     try {
-      const document = await PDFDocument.create(); const pdfFonts = await embedAvenmediaFonts(document);
- enableArabicPdfText(document, pdfFonts);
- const { font, bold } = pdfFonts;
-      let logo: PDFImage | null = null;
-      try { const response = await fetch('/branding/aven-logo-192.png'); if (response.ok) logo = await document.embedPng(new Uint8Array(await response.arrayBuffer())); } catch { /* continue without decorative logo */ }
-      let page = document.addPage([595, 842]); let y = 742;
-      const navy = rgb(.05, .09, .28), green = rgb(.08, .55, .3), red = rgb(.75, .16, .16), pale = rgb(.95, .96, 1);
-      const header = () => {
-        page.drawRectangle({ x: 0, y: 770, width: 595, height: 72, color: navy });
-        page.drawText('AVENMEDIA', { x: 40, y: 807, size: 25, font: bold, color: rgb(1, 1, 1) });
-        page.drawText('كشف الحساب المالي', { x: 40, y: 786, size: 12, font, color: rgb(.82, .86, 1) });
-        page.drawText(month, { x: 450, y: 800, size: 14, font: bold, color: rgb(1, 1, 1) });
-        if (logo) page.drawImage(logo, { x: 510, y: 784, width: 42, height: 42 });
-        y = 742;
-      };
-      header();
-      page.drawRectangle({ x: 40, y: 680, width: 515, height: 45, color: rgb(.9, .96, .92), borderColor: green, borderWidth: 1 });
-      page.drawText(`إجمالي الأرباح / الداخل: ${totals.income.toFixed(2)}`, { x: 58, y: 697, size: 13, font: bold, color: green });
-      page.drawRectangle({ x: 40, y: 620, width: 515, height: 45, color: rgb(1, .93, .93), borderColor: red, borderWidth: 1 });
-      page.drawText(`إجمالي المصاريف / الخسائر: ${totals.expense.toFixed(2)}`, { x: 58, y: 637, size: 13, font: bold, color: red });
-      page.drawRectangle({ x: 40, y: 560, width: 515, height: 45, color: pale, borderColor: navy, borderWidth: 1 });
-      page.drawText(`الربح الصافي: ${(totals.income - totals.expense).toFixed(2)}`, { x: 58, y: 577, size: 13, font: bold, color: navy });
-      y = 525;
-      const newPage = () => { page = document.addPage([595, 842]); header(); };
-      page.drawText('التفاصيل اليومية', { x: 48, y, size: 13, font: bold, color: navy }); y -= 28;
-      rows.forEach((row, index) => {
-        if (y < 70) newPage();
-        page.drawRectangle({ x: 40, y: y - 22, width: 515, height: 30, color: index % 2 ? pale : rgb(1, 1, 1), borderColor: rgb(.75, .77, .88), borderWidth: 1 });
-        page.drawText(`${index + 1}. ${row.entry_type === 'income' ? 'دخل / دفعة' : 'مصروف / خصم'}`, { x: 50, y: y - 10, size: 10, font: bold, color: row.entry_type === 'income' ? green : red });
-        page.drawText(Number(row.amount).toFixed(2), { x: 220, y: y - 10, size: 10, font: bold, color: navy });
-        page.drawText(row.entry_date, { x: 300, y: y - 10, size: 9, font, color: navy });
-        page.drawText(row.description.slice(0, 32), { x: 385, y: y - 10, size: 9, font, color: navy });
-        y -= 38;
-      });
-      const bytes = await document.save();
+      const bytes = await makeFinanceLedgerPdf(month, totals, rows);
       const result = await downloadPdf(bytes, `avenmedia-finance-${month}.pdf`);
       setDownloadUrl(result.objectUrl || '');
       setDownloaded(result.native ? 'تم حفظ كشف الحساب وفتح مجلد التنزيلات' : 'تم تنزيل كشف الحساب');
